@@ -40,6 +40,7 @@ PROFILE_ONBOARDING_REFERENCE = ROOT / "references" / "profile-onboarding.md"
 LINUX_VAULT_REFERENCE = ROOT / "references" / "linux-vault.md"
 TROUBLESHOOTING_REFERENCE = ROOT / "references" / "troubleshooting.md"
 REQUIREMENTS = ROOT / "requirements.txt"
+REQUIREMENTS_LOCK = ROOT / "requirements.lock"
 PUBLISHED_REPO_URL = "https://github.com/weex-labs/weex-trader-skill"
 DOC_FILES = (
     SKILL,
@@ -181,10 +182,24 @@ class RepoConsistencyTests(unittest.TestCase):
 
     def test_generator_dependencies_are_declared(self) -> None:
         requirements = parse_requirement_names(REQUIREMENTS.read_text(encoding="utf-8"))
+        requirements_lock_text = REQUIREMENTS_LOCK.read_text(encoding="utf-8")
 
         self.assertIn("cryptography", requirements)
         self.assertIn("requests", requirements)
         self.assertIn("beautifulsoup4", requirements)
+        self.assertIn("cryptography==", requirements_lock_text)
+        self.assertIn("--hash=sha256:", requirements_lock_text)
+
+    def test_runtime_dependency_guidance_uses_locked_requirements(self) -> None:
+        script_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (ROOT / "scripts").glob("weex_*.py")
+        )
+
+        self.assertNotIn("Install requirements.txt", script_text)
+        self.assertNotIn("安装 requirements.txt", script_text)
+        self.assertIn("requirements.lock", script_text)
+        self.assertIn("--require-hashes", script_text)
 
     def test_split_references_exist(self) -> None:
         self.assertTrue(PROFILE_MANAGER_REFERENCE.exists())
@@ -299,7 +314,7 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIn("GH_CLI_VERSION", workflow_text)
         self.assertIn("Install GitHub CLI with skill support", workflow_text)
         self.assertIn("gh skill --help", workflow_text)
-        self.assertIn("python3 -m pip install -r skills/weex-trader-skill/requirements.txt", workflow_text)
+        self.assertIn("python3 -m pip install --require-hashes -r skills/weex-trader-skill/requirements.lock", workflow_text)
         self.assertIn("tools/run_skill_tests.py", workflow_text)
         self.assertIn("tools/clean_local_skill_checkout.py --check", workflow_text)
         self.assertIn("tools/install_local_skills.py", workflow_text)
@@ -344,6 +359,13 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIn("For every turn that uses this skill", skill_text)
         self.assertIn("before routing or UI launch", skill_text)
         self.assertIn("scripts/weex_agent_state.py --command skill.preflight --language <zh|en> --pretty", skill_text)
+
+    def test_skill_requires_managed_runtime_for_windows_and_macos_gui(self) -> None:
+        skill_text = SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("must use the managed GUI runtime", skill_text)
+        self.assertIn("must not launch GUI entrypoints with the system", skill_text)
+        self.assertIn("system, miniforge, pyenv, Homebrew, or OS Python", skill_text)
 
     def test_manifest_and_docs_do_not_publish_weex_profile_lang_override(self) -> None:
         combined = "\n".join(path.read_text(encoding="utf-8") for path in (SKILL, README))

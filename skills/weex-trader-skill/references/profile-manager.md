@@ -70,8 +70,8 @@ python3 scripts/weex_gui_launcher.py vault-manager --language en --requested-act
 
 Notes:
 
-- the GUI entrypoints also auto-detach when they are launched from a non-interactive/tool-managed shell, so agent-driven `python3 scripts/weex_profile_manager_zh.py` now survives shell cleanup
-- prefer the detached launcher or the built-in auto-detach path instead of `nohup ... &` when an AI/tool host is launching the GUI
+- the GUI entrypoints also auto-detach when they are launched from a non-interactive/tool-managed shell, so agent-driven `python3 scripts/weex_profile_manager_zh.py` now survives shell cleanup after it switches to the managed runtime
+- prefer the detached launcher instead of `nohup ... &` when an AI/tool host is launching the GUI; on Windows/macOS it verifies and uses the managed runtime before launch
 - explicit detached launch aims to avoid extra Terminal/cmd windows: macOS uses a transient `.app` wrapper, while Windows prefers `pythonw.exe` or another hidden background process
 - launch records and logs live under `~/.weex-trader-skill/gui-launchers`; the launcher keeps only recent records and trims each `.log` file to 256 KiB, so use the newest log when diagnosing startup problems
 - set `WEEX_GUI_FORCE_FOREGROUND=1` only when you explicitly want the GUI to stay attached to the current shell, which can reintroduce a Terminal/cmd window
@@ -96,8 +96,8 @@ Collect or review the full profile parameter set, not only the minimum credentia
 - `api_secret`: required; WEEX Secret Key used to sign private requests
 - `api_passphrase`: required; WEEX API Passphrase paired with the key and secret
 - description / note: optional metadata for account purpose or permissions
-- `contract_base_url`: optional; leave empty to use `https://api-contract.weex.com`
-- `spot_base_url`: optional; leave empty to use `https://api-spot.weex.com`
+- `contract_base_url`: optional; leave empty to use `https://api-contract.weex.com`; custom values must be full `https://` URLs on `weex.com`, `*.weex.com`, `weex.tech`, or `*.weex.tech`
+- `spot_base_url`: optional; leave empty to use `https://api-spot.weex.com`; custom values must be full `https://` URLs on `weex.com`, `*.weex.com`, `weex.tech`, or `*.weex.tech`
 - whether to set it as default: optional workflow choice; if enabled, later private commands can omit `--profile`
 
 ## Typical GUI Tasks
@@ -148,6 +148,6 @@ The GUI keeps the existing `profile_id`, so rename is safer here than in ad hoc 
 
 - private REST commands require a saved profile
 - public commands such as `ticker` and `list-endpoints` do not require a valid default profile
-- on Windows and macOS, the GUI entrypoints can auto-bootstrap a managed CPython 3.12 runtime when the current interpreter cannot launch Tk
-- on Windows and macOS, the GUI entrypoints can also auto-detach from non-interactive/tool-managed shells so the UI keeps running after the launcher shell exits without needing an extra Terminal/cmd window in the normal detached-launch path
+- on Windows and macOS, the GUI entrypoints must use an explicitly prepared managed CPython 3.12.13 runtime even when the current interpreter can launch Tk; AI should explain the pinned setup and ask for confirmation before running `scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty`
+- on Windows and macOS, the GUI entrypoints can also auto-detach from non-interactive/tool-managed shells so the UI keeps running after the launcher shell exits without needing an extra Terminal/cmd window in the normal detached-launch path; the detached launcher points the child process at the managed runtime
 - if the managed GUI bootstrap is disabled or cannot be completed, fall back to `references/profile-onboarding.md` for terminal commands

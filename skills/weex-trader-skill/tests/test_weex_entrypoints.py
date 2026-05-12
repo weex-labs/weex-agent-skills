@@ -9,6 +9,8 @@ import types
 import unittest
 import json
 from pathlib import Path
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Thread
 from unittest import mock
 
 
@@ -69,12 +71,110 @@ runpy.run_path(script_path, run_name="__main__")
             check=False,
         )
 
+    def assert_authenticated_redirect_is_not_followed(self, client: object) -> None:
+        captured_headers: list[dict[str, str]] = []
+
+        class Receiver(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                captured_headers.append(dict(self.headers.items()))
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+
+            def log_message(self, *_args: object) -> None:
+                pass
+
+        class Redirector(BaseHTTPRequestHandler):
+            target = ""
+
+            def do_GET(self) -> None:
+                self.send_response(302)
+                self.send_header("Location", self.target)
+                self.end_headers()
+
+            def log_message(self, *_args: object) -> None:
+                pass
+
+        receiver = HTTPServer(("127.0.0.1", 0), Receiver)
+        receiver_thread = Thread(target=receiver.serve_forever, daemon=True)
+        receiver_thread.start()
+        Redirector.target = f"http://127.0.0.1:{receiver.server_port}/capture"
+        redirector = HTTPServer(("127.0.0.1", 0), Redirector)
+        redirector_thread = Thread(target=redirector.serve_forever, daemon=True)
+        redirector_thread.start()
+        try:
+            prepared = {
+                "url": f"http://127.0.0.1:{redirector.server_port}/start",
+                "method": "GET",
+                "data": None,
+                "headers": {
+                    "ACCESS-KEY": "key-secret",
+                    "ACCESS-PASSPHRASE": "pass-secret",
+                    "ACCESS-SIGN": "sign-secret",
+                    "User-Agent": "redirect-regression-test",
+                },
+            }
+
+            response = client.send(prepared)
+        finally:
+            redirector.shutdown()
+            receiver.shutdown()
+            redirector.server_close()
+            receiver.server_close()
+
+        self.assertFalse(response["ok"])
+        self.assertEqual(response["status"], 302)
+        self.assertEqual(captured_headers, [])
+
     def test_profile_manager_help_works_without_gui_runtime(self) -> None:
         completed = self.run_command(str(SCRIPTS / "weex_profile_manager_en.py"), "--help")
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("usage:", completed.stdout)
         self.assertIn("Run without arguments", completed.stdout)
+
+    def test_profile_manager_reports_missing_managed_runtime_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            env = os.environ.copy()
+            env["WEEX_TRADER_SKILL_HOME"] = tempdir
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPTS / "weex_profile_manager_zh.py")],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        combined = f"{completed.stdout}\n{completed.stderr}"
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("尚未安装受管 GUI 运行时", combined)
+        self.assertNotIn("Traceback", combined)
+
+    def test_vault_manager_reports_missing_managed_runtime_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            env = os.environ.copy()
+            env["WEEX_TRADER_SKILL_HOME"] = tempdir
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "weex_vault_manager_app.py"),
+                    "--language",
+                    "zh",
+                    "--requested-action",
+                    "status",
+                ],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        combined = f"{completed.stdout}\n{completed.stderr}"
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("尚未安装受管 GUI 运行时", combined)
+        self.assertNotIn("Traceback", combined)
 
     def test_gui_bootstrap_help_works_without_gui_runtime(self) -> None:
         completed = self.run_command(str(SCRIPTS / "weex_gui_bootstrap.py"), "--help")
@@ -114,7 +214,8 @@ runpy.run_path(script_path, run_name="__main__")
             )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("Inspect the current GUI runtime", completed.stdout)
+        self.assertIn("Inspect the current Python runtime", completed.stdout)
+        self.assertIn("required managed GUI runtime", completed.stdout)
         self.assertIn("--fix", completed.stdout)
 
     def test_runtime_setup_help_works_without_profile_runtime(self) -> None:
@@ -456,6 +557,115 @@ runpy.run_path(script_path, run_name="__main__")
 
         self.assertEqual(str(exc_info.exception), spot.GET_BODY_UNSUPPORTED_MESSAGE)
 
+    def test_contract_client_rejects_non_weex_base_url(self) -> None:
+        import weex_contract_api as contract
+
+        with self.assertRaises(SystemExit) as exc_info:
+            contract.WeexContractClient(
+                base_url="https://contract.example.test",
+                timeout=contract.DEFAULT_TIMEOUT,
+                locale=contract.DEFAULT_LOCALE,
+                api_key=None,
+                api_secret=None,
+                api_passphrase=None,
+            )
+
+        self.assertIn("must use a weex.com or weex.tech host", str(exc_info.exception))
+
+    def test_spot_client_accepts_weex_tech_base_url(self) -> None:
+        import weex_spot_api as spot
+
+        client = spot.WeexSpotClient(
+            base_url="https://spot.weex.tech/",
+            timeout=spot.DEFAULT_TIMEOUT,
+            locale=spot.DEFAULT_LOCALE,
+            api_key=None,
+            api_secret=None,
+            api_passphrase=None,
+        )
+
+        self.assertEqual(client.base_url, "https://spot.weex.tech")
+
+    def test_zh_profile_cli_reports_invalid_base_url_in_chinese(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            env = os.environ.copy()
+            env["WEEX_TRADER_SKILL_HOME"] = tempdir
+            env["WEEX_GUI_RUNTIME_DISABLE"] = "1"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "weex_profiles_zh.py"),
+                    "save",
+                    "--profile",
+                    "main",
+                    "--contract-base-url",
+                    "https://contract.example.test",
+                    "--api-key",
+                    "key-1234",
+                    "--api-secret",
+                    "secret-1234",
+                    "--api-passphrase",
+                    "pass-1234",
+                ],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        combined = f"{completed.stdout}\n{completed.stderr}"
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("合约 Base URL", combined)
+        self.assertIn("weex.com", combined)
+        self.assertIn("contract.example.test", combined)
+        self.assertNotIn("must use", combined)
+
+    def test_profile_cli_validates_base_url_before_prompting_for_secrets(self) -> None:
+        import weex_profiles_cli as profiles_cli
+
+        args = types.SimpleNamespace(
+            profile="main",
+            description=None,
+            contract_base_url="https://contract.example.test",
+            spot_base_url=None,
+            api_key=None,
+            api_secret=None,
+            api_passphrase=None,
+            api_key_env=None,
+            api_secret_env=None,
+            api_passphrase_env=None,
+            secrets_stdin_json=False,
+            prompt_secrets=True,
+            set_default=False,
+            clear_default=False,
+            pretty=False,
+        )
+
+        with mock.patch.object(profiles_cli, "prompt_secret", side_effect=AssertionError("prompted for secrets")):
+            with mock.patch.object(profiles_cli, "upsert_profile") as upsert_mock:
+                with self.assertRaises(profiles_cli.ProfileError) as exc_info:
+                    profiles_cli.cmd_save(args, "en")
+
+        upsert_mock.assert_not_called()
+        self.assertIn("contract.example.test", str(exc_info.exception))
+
+    def test_contract_client_does_not_follow_redirects_with_auth_headers(self) -> None:
+        import weex_contract_api as contract
+
+        client = contract.WeexContractClient.__new__(contract.WeexContractClient)
+        client.timeout = 5
+
+        self.assert_authenticated_redirect_is_not_followed(client)
+
+    def test_spot_client_does_not_follow_redirects_with_auth_headers(self) -> None:
+        import weex_spot_api as spot
+
+        client = spot.WeexSpotClient.__new__(spot.WeexSpotClient)
+        client.timeout = 5
+
+        self.assert_authenticated_redirect_is_not_followed(client)
+
     def test_public_spot_cli_bootstraps_agent_state_without_profile_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             env = os.environ.copy()
@@ -499,7 +709,7 @@ runpy.run_path(script_path, run_name="__main__")
     def test_public_spot_runtime_profile_uses_default_profile_when_available(self) -> None:
         import weex_spot_api as spot
 
-        profile = types.SimpleNamespace(name="main", spot_base_url="https://spot.example.test")
+        profile = types.SimpleNamespace(name="main", spot_base_url="https://spot.weex.com")
         previous_resolve_profile = spot.resolve_profile
         previous_load_profile_credentials = spot.load_profile_credentials
         previous_profile_error = spot.ProfileError
@@ -519,7 +729,7 @@ runpy.run_path(script_path, run_name="__main__")
     def test_public_contract_runtime_profile_uses_default_profile_when_available(self) -> None:
         import weex_contract_api as contract
 
-        profile = types.SimpleNamespace(name="main", contract_base_url="https://contract.example.test")
+        profile = types.SimpleNamespace(name="main", contract_base_url="https://contract.weex.tech")
         previous_resolve_profile = contract.resolve_profile
         previous_load_profile_credentials = contract.load_profile_credentials
         previous_profile_error = contract.ProfileError
@@ -551,8 +761,8 @@ runpy.run_path(script_path, run_name="__main__")
                             with mock.patch.dict(
                                 os.environ,
                                 {
-                                    "WEEX_CONTRACT_API_BASE": "https://contract.env.test",
-                                    "WEEX_API_BASE": "https://generic.env.test",
+                                    "WEEX_CONTRACT_API_BASE": "https://contract.weex.tech",
+                                    "WEEX_API_BASE": "https://generic.weex.com",
                                     "WEEX_LOCALE": "zh-CN",
                                 },
                                 clear=False,
@@ -561,7 +771,7 @@ runpy.run_path(script_path, run_name="__main__")
 
         self.assertEqual(exit_code, 0)
         client_mock.assert_called_once_with(
-            base_url="https://contract.env.test",
+            base_url="https://contract.weex.tech",
             timeout=contract.DEFAULT_TIMEOUT,
             locale="zh-CN",
             api_key=None,
@@ -585,7 +795,7 @@ runpy.run_path(script_path, run_name="__main__")
                             with mock.patch.dict(
                                 os.environ,
                                 {
-                                    "WEEX_API_BASE": "https://generic.spot.env.test",
+                                    "WEEX_API_BASE": "https://generic.spot.weex.tech",
                                     "WEEX_LOCALE": "zh-CN",
                                 },
                                 clear=False,
@@ -594,7 +804,7 @@ runpy.run_path(script_path, run_name="__main__")
 
         self.assertEqual(exit_code, 0)
         client_mock.assert_called_once_with(
-            base_url="https://generic.spot.env.test",
+            base_url="https://generic.spot.weex.tech",
             timeout=spot.DEFAULT_TIMEOUT,
             locale="zh-CN",
             api_key=None,

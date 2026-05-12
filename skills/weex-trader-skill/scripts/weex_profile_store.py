@@ -36,6 +36,8 @@ try:
 except ImportError:  # pragma: no cover
     fcntl = None
 
+from weex_url_policy import BaseUrlPolicyError, validate_weex_base_url
+
 
 SERVICE_NAME = "weex-trader-skill"
 CONFIG_HOME_ENV = "WEEX_TRADER_SKILL_HOME"
@@ -74,7 +76,8 @@ def _require_cryptography_runtime() -> None:
         return
     raise ProfileError(
         "WEEX application vault storage requires Python dependency 'cryptography'. "
-        "Install requirements.txt with this interpreter and retry."
+        "Run scripts/weex_runtime_setup.py --pretty or install requirements.lock with --require-hashes "
+        "using this interpreter and retry."
     )
 
 
@@ -803,6 +806,16 @@ def _clean_text(value: Optional[str]) -> str:
     return (value or "").strip()
 
 
+def _clean_optional_base_url(value: Optional[str], field_name: str) -> str:
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return ""
+    try:
+        return validate_weex_base_url(cleaned, label=field_name)
+    except BaseUrlPolicyError as exc:
+        raise ProfileError(str(exc)) from exc
+
+
 def _profile_from_raw(name: str, raw: Any) -> ProfileMetadata:
     if not isinstance(raw, dict):
         raise ProfileError(f"Invalid profile metadata for '{name}'")
@@ -1041,6 +1054,17 @@ def upsert_profile(
     if duplicate is not None and (existing is None or duplicate.profile_id != existing.profile_id):
         raise ProfileError(f"profile name '{key}' already exists")
 
+    effective_contract_base_url = (
+        _clean_optional_base_url(contract_base_url, "contract_base_url")
+        if contract_base_url is not None
+        else (existing.contract_base_url if existing else "")
+    )
+    effective_spot_base_url = (
+        _clean_optional_base_url(spot_base_url, "spot_base_url")
+        if spot_base_url is not None
+        else (existing.spot_base_url if existing else "")
+    )
+
     secret_values = [api_key, api_secret, api_passphrase]
     has_secret_update = any(value is not None for value in secret_values)
     effective_profile_id = existing.profile_id if existing is not None else uuid.uuid4().hex
@@ -1079,8 +1103,8 @@ def upsert_profile(
         profile_id=effective_profile_id,
         name=key,
         description=_clean_text(description) if description is not None else (existing.description if existing else ""),
-        contract_base_url=_clean_text(contract_base_url) if contract_base_url is not None else (existing.contract_base_url if existing else ""),
-        spot_base_url=_clean_text(spot_base_url) if spot_base_url is not None else (existing.spot_base_url if existing else ""),
+        contract_base_url=effective_contract_base_url,
+        spot_base_url=effective_spot_base_url,
         api_key_hint=api_key_hint,
     )
     save_profile_metadata(profile, set_default=set_default)

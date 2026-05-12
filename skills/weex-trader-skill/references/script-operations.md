@@ -4,14 +4,14 @@ Use this reference only when direct local script execution, dependency setup, or
 
 ## Python Prerequisites
 
-Profile, vault, private-trading, and API-definition regeneration commands require the dependencies in [requirements.txt](../requirements.txt).
+Profile, vault, private-trading, and API-definition regeneration commands require the hashed dependencies in [requirements.lock](../requirements.lock).
 
 ```bash
 # Windows
-py -3 -m pip install -r requirements.txt
+py -3 -m pip install --require-hashes -r requirements.lock
 
 # macOS / Linux
-python3 -m pip install -r requirements.txt
+python3 -m pip install --require-hashes -r requirements.lock
 ```
 
 Before private contract or spot commands, run `scripts/weex_agent_state.py --command skill.preflight ...` and inspect `runtime.host.requirements_ready`, `runtime.host.missing_modules`, and `runtime.env_validation`. The private REST CLIs now stop immediately when those checks fail instead of waiting until profile or order execution.
@@ -26,7 +26,7 @@ py -3 scripts/weex_runtime_setup.py --pretty
 python3 scripts/weex_runtime_setup.py --pretty
 ```
 
-This helper installs `requirements.txt` into the current interpreter, attempts `ensurepip` first if `pip` is missing, refreshes `agent-init.json` / `agent-runtime.json`, and reports whether the interpreter is actually ready for private WEEX CLI flows.
+This helper installs `requirements.lock` with hash verification into the current interpreter, attempts `ensurepip` first if `pip` is missing, refreshes `agent-init.json` / `agent-runtime.json`, and reports whether the interpreter is actually ready for private WEEX CLI flows.
 
 Private contract and spot CLIs also auto-attempt this helper when the current interpreter is missing required Python dependencies. Invalid runtime overrides such as a bad `WEEX_API_TIMEOUT` value still stop immediately because the helper does not modify environment variables for you.
 
@@ -35,31 +35,32 @@ Command launcher policy:
 - Windows: use `py -3`
 - macOS / Linux: use `python3`
 - GUI profile management also needs `tkinter`
-- On macOS and Windows tool-managed shells, prefer `scripts/weex_gui_launcher.py` for detached GUI launch, or rely on the GUI entrypoints' built-in auto-detach behavior when you want the GUI without an extra Terminal/cmd window
+- On macOS and Windows tool-managed shells, use `scripts/weex_gui_launcher.py` for detached GUI launch after the managed GUI runtime is ready; the launcher verifies the managed runtime and uses it for the child process
 
 ## Managed GUI Runtime
 
-On Windows and macOS, the GUI entrypoints can self-bootstrap a managed Python runtime when the current interpreter cannot initialize Tk or is missing GUI-side dependencies.
+On Windows and macOS, the GUI entrypoints must use an explicitly prepared managed Python runtime even when the current interpreter can initialize Tk and has GUI-side dependencies. They do not download or install that runtime implicitly. If an AI assistant sees `explicit_setup_required`, it should explain the pinned uv/Python setup plus checksum/hash verification, ask whether it should install the runtime, and run the `ensure --accept-managed-runtime --pretty` command only after clear confirmation.
 
 Manual repair commands:
 
 ```bash
 # Windows users: replace python3 with py -3
 python3 scripts/weex_gui_bootstrap.py probe --pretty
-python3 scripts/weex_gui_bootstrap.py ensure --pretty
-python3 scripts/weex_doctor.py gui --fix
+python3 scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty
+python3 scripts/weex_doctor.py gui
 ```
 
 Notes:
 
 - the bootstrap stores a user-local runtime under the WEEX config directory such as `~/.weex-trader-skill/gui-runtime`
-- it uses `uv` to provision a managed CPython 3.12 virtual environment and install `requirements.txt`
-- the profile and vault GUI entrypoints will automatically re-launch themselves inside that managed runtime when the current interpreter is not GUI-safe
+- explicit `ensure --accept-managed-runtime` downloads a pinned uv installer, verifies its SHA256, provisions a managed CPython 3.12.13 virtual environment, and installs `requirements.lock` with hash verification
+- user-facing AI flows should offer to perform this command after confirmation instead of requiring non-technical users to copy and run it themselves
+- the profile and vault GUI entrypoints will automatically re-launch themselves inside that managed runtime when they are started directly from a non-managed interpreter
 - this managed bootstrap is for the Windows/macOS GUI flows; terminal/private REST commands still run on the interpreter you launched and therefore still need their own preflight/runtime checks
 - the profile and vault GUI entrypoints also auto-detach when they are started from a non-interactive/tool-managed shell on macOS or Windows
 - explicit detached launch uses a transient `.app` wrapper on macOS and prefers `pythonw.exe` or another hidden background process on Windows
 - detached-launch records and logs are stored under `~/.weex-trader-skill/gui-launchers`; the launcher keeps only recent records and trims each `.log` file to 256 KiB
-- `scripts/weex_agent_state.py --command skill.preflight ...` will also warm this runtime automatically when GUI routing is expected but the current interpreter is not GUI-safe
+- `scripts/weex_agent_state.py --command skill.preflight ...` only reports when explicit managed-runtime setup is required; it does not download or install runtime files
 - use `WEEX_GUI_RUNTIME_DISABLE=1` only when you explicitly want to suppress the bootstrap path
 - use `WEEX_GUI_FORCE_FOREGROUND=1` only when you explicitly want the GUI to stay attached to the current shell, which can reintroduce a Terminal/cmd window
 

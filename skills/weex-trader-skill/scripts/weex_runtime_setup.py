@@ -11,6 +11,7 @@ import sys
 from typing import Any, Optional
 
 from weex_agent_state import refresh_agent_records, requirements_path
+from weex_gui_bootstrap import requirements_lock_path
 
 
 def output_json(payload: dict[str, Any], pretty: bool) -> None:
@@ -56,13 +57,22 @@ def build_setup_report(language: Optional[str] = None) -> dict[str, Any]:
                 "pip",
                 "install",
                 "--disable-pip-version-check",
+                "--require-hashes",
                 "-r",
-                str(requirements_path()),
+                str(requirements_lock_path()),
             ]
         )
     else:
         install_result = {
-            "command": [sys.executable, "-m", "pip", "install", "-r", str(requirements_path())],
+            "command": [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--require-hashes",
+                "-r",
+                str(requirements_lock_path()),
+            ],
             "returncode": 1,
             "stdout": "",
             "stderr": "pip is unavailable for this interpreter. ensurepip could not recover it.",
@@ -81,6 +91,7 @@ def build_setup_report(language: Optional[str] = None) -> dict[str, Any]:
         "ok": ok,
         "python_executable": sys.executable,
         "requirements_path": str(requirements_path()),
+        "requirements_lock_path": str(requirements_lock_path()),
         "pip": {
             "available_before": available_before,
             "ensurepip_attempted": ensurepip_attempted,

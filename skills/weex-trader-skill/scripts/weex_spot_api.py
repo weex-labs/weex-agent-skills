@@ -22,6 +22,7 @@ from typing import Any, Dict, Optional
 from urllib import error, parse, request
 
 from weex_agent_state import RuntimePreflightError, ensure_private_runtime_ready, refresh_agent_records
+from weex_url_policy import BaseUrlPolicyError, open_weex_request, validate_weex_base_url
 
 ProfileError = RuntimeError
 load_profile_credentials = None
@@ -39,8 +40,8 @@ PRIVATE_PROFILE_REQUIRED_MESSAGE = (
 )
 PROFILE_RUNTIME_DEPENDENCY_MISSING = (
     "Unable to enable saved-profile support for the WEEX Spot REST API helper "
-    "because Python dependency '{module_name}' is missing. Install requirements.txt "
-    "with this interpreter and retry."
+    "because Python dependency '{module_name}' is missing. Run scripts/weex_runtime_setup.py --pretty "
+    "or install requirements.lock with --require-hashes using this interpreter and retry."
 )
 PROFILE_RUNTIME_UNAVAILABLE = (
     "Unable to enable saved-profile support for the WEEX Spot REST API helper "
@@ -149,7 +150,10 @@ class WeexSpotClient:
         profile_name: Optional[str] = None,
         user_agent: str = "weex-trader-skill-spot/1.0",
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        try:
+            self.base_url = validate_weex_base_url(base_url, label="spot base URL")
+        except BaseUrlPolicyError as exc:
+            raise SystemExit(str(exc)) from exc
         self.timeout = timeout
         self.locale = locale
         self.api_key = api_key
@@ -253,7 +257,7 @@ class WeexSpotClient:
             headers=prepared["headers"],
         )
         try:
-            with request.urlopen(req, timeout=self.timeout) as resp:
+            with open_weex_request(req, timeout=self.timeout, headers=prepared["headers"]) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
                 try:
                     payload = json.loads(raw)

@@ -33,7 +33,7 @@ jobs:
           gh skill --help
 
       - name: Install skill test dependencies
-        run: python3 -m pip install -r skills/weex-trader-skill/requirements.txt
+        run: python3 -m pip install --require-hashes -r skills/weex-trader-skill/requirements.lock
 
       - name: Verify checkout is clean for packaging
         run: python3 tools/clean_local_skill_checkout.py --check

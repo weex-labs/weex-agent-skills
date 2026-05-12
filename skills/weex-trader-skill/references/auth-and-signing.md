@@ -3,6 +3,7 @@
 REST base URLs:
 - contract: `https://api-contract.weex.com`
 - spot: `https://api-spot.weex.com`
+- custom base URLs must use `https://` and a host under `weex.com` or `weex.tech`
 
 Private headers:
 - `ACCESS-KEY`

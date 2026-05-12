@@ -505,6 +505,93 @@ class ProfileManagerLayoutTests(unittest.TestCase):
         set_default_mock.assert_called_once_with("profile-main")
         refresh_agent_records_mock.assert_called_once()
 
+    def test_save_profile_shows_zh_error_for_invalid_base_url_without_saving(self) -> None:
+        profile_app = app.ProfileManagerApp.__new__(app.ProfileManagerApp)
+        profile_app.profile_actions_enabled = True
+        profile_app.root = object()
+        profile_app.language = "zh"
+        profile_app.texts = app.TEXTS["zh"]
+        profile_app.current_profile_id = None
+        profile_app.name_var = FakeVar("main")
+        profile_app.description_text = FakeTextValue("主账号")
+        profile_app.contract_base_url_var = FakeVar("https://contract.example.test")
+        profile_app.spot_base_url_var = FakeVar("")
+        profile_app.api_key_var = FakeVar("key-1234")
+        profile_app.api_secret_var = FakeVar("secret-1234")
+        profile_app.api_passphrase_var = FakeVar("pass-1234")
+        profile_app.default_var = FakeVar(True)
+        profile_app.t = app.ProfileManagerApp.t.__get__(profile_app, app.ProfileManagerApp)
+        profile_app.local_text = app.ProfileManagerApp.local_text.__get__(profile_app, app.ProfileManagerApp)
+
+        fake_messagebox = types.SimpleNamespace(
+            showwarning=mock.Mock(),
+            showerror=mock.Mock(),
+            showinfo=mock.Mock(),
+        )
+
+        with mock.patch.object(app, "tk", types.SimpleNamespace(END="end")):
+            with mock.patch.object(app, "messagebox", fake_messagebox):
+                with mock.patch.object(app, "upsert_profile") as upsert_mock:
+                    profile_app.save_profile()
+
+        upsert_mock.assert_not_called()
+        fake_messagebox.showerror.assert_called_once()
+        title, message = fake_messagebox.showerror.call_args.args
+        self.assertEqual(title, "保存失败")
+        self.assertIn("合约 Base URL", message)
+        self.assertIn("weex.com", message)
+        self.assertIn("contract.example.test", message)
+        self.assertNotIn("must use", message)
+        self.assertEqual(profile_app.name_var.get(), "main")
+        self.assertEqual(profile_app.description_text.get(), "主账号")
+        self.assertEqual(profile_app.contract_base_url_var.get(), "https://contract.example.test")
+        self.assertEqual(profile_app.spot_base_url_var.get(), "")
+        self.assertEqual(profile_app.api_key_var.get(), "key-1234")
+        self.assertEqual(profile_app.api_secret_var.get(), "secret-1234")
+        self.assertEqual(profile_app.api_passphrase_var.get(), "pass-1234")
+
+    def test_save_profile_preserves_form_values_when_store_rejects_save(self) -> None:
+        profile_app = app.ProfileManagerApp.__new__(app.ProfileManagerApp)
+        profile_app.profile_actions_enabled = True
+        profile_app.root = object()
+        profile_app.language = "en"
+        profile_app.texts = app.TEXTS["en"]
+        profile_app.current_profile_id = None
+        profile_app.name_var = FakeVar("main")
+        profile_app.description_text = FakeTextValue("Main account")
+        profile_app.contract_base_url_var = FakeVar("https://contract.weex.tech")
+        profile_app.spot_base_url_var = FakeVar("https://spot.weex.com")
+        profile_app.api_key_var = FakeVar("key-1234")
+        profile_app.api_secret_var = FakeVar("secret-1234")
+        profile_app.api_passphrase_var = FakeVar("pass-1234")
+        profile_app.default_var = FakeVar(True)
+        profile_app.t = app.ProfileManagerApp.t.__get__(profile_app, app.ProfileManagerApp)
+        profile_app.local_text = app.ProfileManagerApp.local_text.__get__(profile_app, app.ProfileManagerApp)
+        profile_app.refresh_profiles = mock.Mock()
+        profile_app._set_mode_badge = mock.Mock()
+        profile_app._update_profile_credential_status = mock.Mock()
+
+        fake_messagebox = types.SimpleNamespace(
+            showwarning=mock.Mock(),
+            showerror=mock.Mock(),
+            showinfo=mock.Mock(),
+        )
+
+        with mock.patch.object(app, "tk", types.SimpleNamespace(END="end")):
+            with mock.patch.object(app, "messagebox", fake_messagebox):
+                with mock.patch.object(app, "upsert_profile", side_effect=app.ProfileError("storage failed")):
+                    profile_app.save_profile()
+
+        fake_messagebox.showerror.assert_called_once_with("Save failed", "storage failed", parent=profile_app.root)
+        profile_app.refresh_profiles.assert_not_called()
+        self.assertEqual(profile_app.name_var.get(), "main")
+        self.assertEqual(profile_app.description_text.get(), "Main account")
+        self.assertEqual(profile_app.contract_base_url_var.get(), "https://contract.weex.tech")
+        self.assertEqual(profile_app.spot_base_url_var.get(), "https://spot.weex.com")
+        self.assertEqual(profile_app.api_key_var.get(), "key-1234")
+        self.assertEqual(profile_app.api_secret_var.get(), "secret-1234")
+        self.assertEqual(profile_app.api_passphrase_var.get(), "pass-1234")
+
     def test_delete_profile_refreshes_agent_cache_after_success(self) -> None:
         profile_app = app.ProfileManagerApp.__new__(app.ProfileManagerApp)
         profile_app.profile_actions_enabled = True

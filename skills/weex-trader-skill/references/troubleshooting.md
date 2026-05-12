@@ -18,9 +18,9 @@ Symptom:
 
 Action:
 
-- run `scripts/weex_runtime_setup.py --pretty` with the same launcher when you want one command to recover `pip` + install `requirements.txt`
+- run `scripts/weex_runtime_setup.py --pretty` with the same launcher when you want one command to recover `pip` + install `requirements.lock` with hash verification
 - private contract and spot CLIs will also auto-attempt that helper before they give up on missing dependencies
-- install `requirements.txt` with the same interpreter used to launch the scripts
+- install `requirements.lock` with `--require-hashes` using the same interpreter used to launch the scripts
 - retry with the same launcher (`py -3` on Windows, `python3` on macOS/Linux)
 
 ### Invalid Runtime Environment Override
@@ -29,7 +29,7 @@ Symptom:
 
 - `Private WEEX command preflight failed`
 - `WEEX_API_TIMEOUT must be a positive number of seconds`
-- `WEEX_API_BASE` / `WEEX_CONTRACT_API_BASE` / `WEEX_SPOT_API_BASE` must be a full URL
+- `WEEX_API_BASE` / `WEEX_CONTRACT_API_BASE` / `WEEX_SPOT_API_BASE` must be full `https://` URLs on `weex.com`, `*.weex.com`, `weex.tech`, or `*.weex.tech`
 
 Action:
 
@@ -44,21 +44,22 @@ Symptom:
 - the profile manager or vault UI exits immediately
 - macOS shows a `Python quit unexpectedly` dialog
 - the current interpreter can import `tkinter`, but creating a window fails
+- preflight says the system/miniforge Python can launch Tk but the managed GUI runtime is missing
 
 Action:
 
-- run the managed GUI runtime bootstrap:
+- ask the AI assistant to install the managed GUI runtime; after confirmation it will run the bootstrap with pinned installer checksum verification and locked dependency hashes:
 
 ```bash
 python3 scripts/weex_gui_bootstrap.py probe --pretty
-python3 scripts/weex_gui_bootstrap.py ensure --pretty
-python3 scripts/weex_doctor.py gui --fix
+python3 scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty
+python3 scripts/weex_doctor.py gui
 ```
 
-- retry the same GUI entrypoint after `ensure` succeeds
+- retry the same GUI entrypoint after `ensure` succeeds; Windows/macOS GUI launch requires the managed runtime even if the system interpreter has Tk
 - if the GUI was launched through `scripts/weex_gui_launcher.py`, inspect the newest file under `~/.weex-trader-skill/gui-launchers/*.log`; detached-launch logs are capped at 256 KiB and old launch records are pruned automatically
 - if `WEEX_GUI_FORCE_FOREGROUND=1` is set, clear it unless you intentionally want the GUI attached to the current shell for debugging
-- if you intentionally want to bypass bootstrap, use the terminal profile commands instead
+- if you intentionally do not want the managed runtime, use the terminal profile commands instead of launching the GUI
 
 ### Authentication Or Signature Error
 

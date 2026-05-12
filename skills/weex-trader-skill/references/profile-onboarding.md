@@ -39,8 +39,8 @@ Complete profile parameter list
 - `api_secret`: required. WEEX Secret Key used to sign private requests.
 - `api_passphrase`: required. WEEX API Passphrase.
 - description / note: optional metadata for the account purpose, such as main, test, read-only, or bot account.
-- `contract_base_url`: optional. Leaving it empty uses the official contract REST host `https://api-contract.weex.com`.
-- `spot_base_url`: optional. Leaving it empty uses the official spot REST host `https://api-spot.weex.com`.
+- `contract_base_url`: optional. Leaving it empty uses the official contract REST host `https://api-contract.weex.com`. Custom values must be full `https://` URLs on `weex.com`, `*.weex.com`, `weex.tech`, or `*.weex.tech`.
+- `spot_base_url`: optional. Leaving it empty uses the official spot REST host `https://api-spot.weex.com`. Custom values must be full `https://` URLs on `weex.com`, `*.weex.com`, `weex.tech`, or `*.weex.tech`.
 - whether to set it as default: optional workflow choice. If enabled, future private commands can omit `--profile` when they should use this account automatically.
 
 Do not frame this as only the minimum fields needed to make private endpoints work. Explain what each field means, whether it is required, what happens if it is omitted, and when metadata or host overrides are intentionally useful.
@@ -76,7 +76,7 @@ Notes:
 - The GUI now fronts the shared application vault on both Windows and macOS through a global vault control area separate from per-profile credential fields.
 - Use the vault action in that global vault control area to initialize, unlock, or lock the vault around private profile work.
 - Windows/macOS vault setup or unlock: AI should use the UI and launch the vault UI so the user completes unlock graphically instead of through terminal prompts.
-- If the current Python runtime cannot initialize Tk on Windows or macOS, the GUI entrypoints can auto-provision a managed CPython 3.12 virtual environment under the local WEEX config directory and relaunch themselves there.
+- On Windows and macOS, GUI profile and vault entrypoints must use the pinned managed CPython 3.12.13 runtime even when the current Python runtime can initialize Tk. AI should explain the pinned setup and ask for confirmation before running `python3 scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty`; GUI entrypoints can then relaunch themselves there.
 
 Terminal fallback:
 
@@ -152,5 +152,5 @@ Before edit/delete/default changes, inspect the current accounts first with `lis
 ## Notes
 
 - Private REST commands require a saved profile.
-- If a command fails with a missing dependency such as `ModuleNotFoundError: cryptography`, install `requirements.txt` with the same interpreter before retrying.
+- If a command fails with a missing dependency such as `ModuleNotFoundError: cryptography`, install `requirements.lock` with `--require-hashes` using the same interpreter before retrying.
 - Public commands such as `ticker` and `list-endpoints` do not require a valid default profile.

@@ -51,7 +51,7 @@ Prefer local secret-entry flows such as the GUI profile manager, the vault UI, `
 
 ## Install In Codex
 
-Install from the checkout you plan to use, or from the published GitHub repo URL `https://github.com/weex-labs/weex-trader-skill`. In that repo layout, this skill should be read from `skills/weex-trader-skill/`, including `skills/weex-trader-skill/README.md`, `skills/weex-trader-skill/SKILL.md`, `skills/weex-trader-skill/manifest.json`, `skills/weex-trader-skill/file-index.json`, `skills/weex-trader-skill/scripts/`, `skills/weex-trader-skill/references/`, and `skills/weex-trader-skill/requirements.txt`.
+Install from the checkout you plan to use, or from the published GitHub repo URL `https://github.com/weex-labs/weex-trader-skill`. In that repo layout, this skill should be read from `skills/weex-trader-skill/`, including `skills/weex-trader-skill/README.md`, `skills/weex-trader-skill/SKILL.md`, `skills/weex-trader-skill/manifest.json`, `skills/weex-trader-skill/file-index.json`, `skills/weex-trader-skill/scripts/`, `skills/weex-trader-skill/references/`, `skills/weex-trader-skill/requirements.txt`, and `skills/weex-trader-skill/requirements.lock`.
 
 If you install from the source repository, prefer the clean-export wrapper instead of installing directly from the working tree:
 
@@ -64,7 +64,7 @@ That wrapper exports only the selected skill directory plus small repo metadata 
 Saved profiles and vault files are runtime state under the local WEEX config directory. Do not ship, version, or share that state as part of the skill checkout.
 AI helper cache files `agent-init.json` and `agent-runtime.json` may also appear there. They help route later AI actions faster, but they are not secret storage.
 AI agents using this skill should run `py -3 scripts/weex_agent_state.py --command skill.preflight --language <zh|en> --pretty` on Windows or `python3 scripts/weex_agent_state.py --command skill.preflight --language <zh|en> --pretty` on macOS/Linux before each routed task so the cache is always present and fresh.
-On Windows and macOS, that preflight step can auto-provision the managed GUI runtime when the current interpreter cannot initialize Tk safely.
+On Windows and macOS, GUI profile and vault flows always require the managed GUI runtime. The preflight step reports whether that runtime is ready, but it does not download or install one implicitly; AI should ask for confirmation before running the reported setup command.
 When a GUI must be launched from an AI/tool-managed shell, the detached launcher tries to show only the WEEX window: macOS uses a transient `.app` wrapper, while Windows prefers `pythonw.exe` or another hidden background process instead of a visible console window.
 If `agent-init.json` is missing and the AI is about to use an auto-language wrapper such as `scripts/weex_vault.py`, the AI should refresh the cache first instead of guessing.
 
@@ -139,7 +139,7 @@ Choose the setup guide that matches how you want to work:
 - Linux vault modes, password handling, and lock/unlock flows: [Linux vault](references/linux-vault.md)
 
 Use the profile manager guide when you want the GUI flow. Use the onboarding guide when you need exact terminal commands or server automation patterns. On Linux, use the `manual_once` vault flow and handle vault passwords, env vars, and temporary secret files carefully. `unlock` only needs one passphrase entry for the existing vault password, while `setup` and `change-password` still confirm the new passphrase twice.
-On Windows and macOS, the GUI entrypoints can self-bootstrap a managed CPython 3.12 runtime if the current interpreter cannot initialize Tk correctly.
+On Windows and macOS, GUI entrypoints must run under the pinned managed CPython 3.12.13 GUI runtime even when the current interpreter can initialize Tk. An AI assistant should explain the pinned setup and ask for confirmation before running `python3 scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty` on the user's behalf.
 If an AI or automation host launches the GUI, prefer `scripts/weex_gui_launcher.py ...`; launcher records and logs are written under `~/.weex-trader-skill/gui-launchers`, keep only the most recent launches, and trim each log to a bounded size.
 
 ## Security Notes
@@ -161,7 +161,7 @@ If an AI or automation host launches the GUI, prefer `scripts/weex_gui_launcher.
 ## Troubleshooting
 
 For common operator issues and recovery paths, open [Troubleshooting](references/troubleshooting.md).
-If a Windows or macOS GUI entrypoint fails before opening, `python3 scripts/weex_doctor.py gui --fix` provides a concise diagnosis plus the managed-runtime repair path.
+If a Windows or macOS GUI entrypoint fails before opening, `python3 scripts/weex_doctor.py gui` provides a concise diagnosis plus the explicit managed-runtime repair path.
 For detached-launch failures, inspect the newest file under `~/.weex-trader-skill/gui-launchers/*.log`; those logs are capped so they stay useful without growing forever.
 
 ## References

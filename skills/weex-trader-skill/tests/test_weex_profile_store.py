@@ -431,6 +431,26 @@ class LinuxVaultStoreTests(unittest.TestCase):
 
 
 class ProfileStoreCredentialBackendTests(unittest.TestCase):
+    def test_upsert_profile_rejects_non_weex_custom_base_url_before_saving(self) -> None:
+        with mock.patch.object(store, "get_profile", return_value=None), mock.patch.object(
+            store,
+            "save_profile_credentials",
+        ) as save_credentials_mock, mock.patch.object(store, "save_profile_metadata") as save_metadata_mock:
+            with self.assertRaises(store.ProfileError) as exc_info:
+                store.upsert_profile(
+                    name="main",
+                    description="Main account",
+                    contract_base_url="https://contract.example.test",
+                    api_key="key-1234",
+                    api_secret="secret-1234",
+                    api_passphrase="pass-1234",
+                    set_default=True,
+                )
+
+        self.assertIn("contract_base_url", str(exc_info.exception))
+        save_credentials_mock.assert_not_called()
+        save_metadata_mock.assert_not_called()
+
     def test_save_profile_credentials_uses_atomic_vault_update_for_encrypted_file_backend(self) -> None:
         credentials = store.ProfileCredentials(
             api_key="key-1234",

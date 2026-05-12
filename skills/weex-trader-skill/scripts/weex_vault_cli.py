@@ -61,7 +61,7 @@ TEXTS = {
         "error_password_env_missing": "Vault passphrase environment variable is empty or not set.",
         "error_password_file_missing": "Vault passphrase file was not found or is empty.",
         "error_mode_required": "Vault mode must be manual_once.",
-        "runtime_dependency_missing": "Unable to start the WEEX vault CLI because Python dependency '{module_name}' is missing. Install requirements.txt with this interpreter and retry.",
+        "runtime_dependency_missing": "Unable to start the WEEX vault CLI because Python dependency '{module_name}' is missing. Run scripts/weex_runtime_setup.py --pretty or install requirements.lock with --require-hashes using this interpreter and retry.",
         "runtime_unavailable": "Unable to start the WEEX vault CLI because its runtime dependencies are unavailable.",
     },
     "zh": {
@@ -99,7 +99,7 @@ TEXTS = {
         "error_password_env_missing": "保险库密码环境变量为空或未设置。",
         "error_password_file_missing": "保险库密码文件不存在、不可读或内容为空。",
         "error_mode_required": "保险库模式必须是 manual_once。",
-        "runtime_dependency_missing": "无法启动 WEEX 保险库命令行工具，因为缺少 Python 依赖 '{module_name}'。请使用当前解释器先安装 requirements.txt 后重试。",
+        "runtime_dependency_missing": "无法启动 WEEX 保险库命令行工具，因为缺少 Python 依赖 '{module_name}'。请先运行 scripts/weex_runtime_setup.py --pretty，或使用当前解释器通过 --require-hashes 安装 requirements.lock 后重试。",
         "runtime_unavailable": "无法启动 WEEX 保险库命令行工具，因为运行时依赖不可用。",
     },
 }

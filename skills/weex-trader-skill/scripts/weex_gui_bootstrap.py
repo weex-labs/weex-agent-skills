@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -11,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -21,8 +23,14 @@ from weex_profile_language import resolve_language
 CONFIG_HOME_ENV = "WEEX_TRADER_SKILL_HOME"
 BOOTSTRAP_ACTIVE_ENV = "WEEX_GUI_RUNTIME_ACTIVE"
 BOOTSTRAP_DISABLE_ENV = "WEEX_GUI_RUNTIME_DISABLE"
-DEFAULT_GUI_PYTHON = "3.12"
+DEFAULT_GUI_PYTHON = "3.12.13"
 GUI_REQUIRED_MODULES = ("cryptography",)
+PINNED_UV_VERSION = "0.11.12"
+PINNED_UV_INSTALLER_SHA256 = {
+    "Darwin": "396c0e0bc4e9fa1001359f83de5e07ef71fecdd8a3371b992a5d4b866533fa99",
+    "Windows": "78e8dd13f72db891df271aee1a6ef95c71bcd93180e3d23a41c605e4952a144e",
+}
+UV_RELEASE_BASE_URL = "https://github.com/astral-sh/uv/releases/download"
 
 
 TEXTS = {
@@ -35,6 +43,16 @@ TEXTS = {
         "current_runtime_missing_modules": "The current Python runtime is missing GUI dependencies: {modules}.",
         "managed_runtime_failed": "The managed GUI runtime was created, but Tk still could not initialize.",
         "disabled": "Managed GUI runtime bootstrap is disabled by environment.",
+        "explicit_runtime_required": (
+            "The managed GUI runtime is not installed. Ask the AI to install it; after your confirmation it will run "
+            "scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty to download and verify the pinned runtime."
+        ),
+        "managed_runtime_accept_help": (
+            "Explicitly allow downloading the pinned uv installer and Python packages for the managed GUI runtime."
+        ),
+        "installer_hash_mismatch": "Downloaded uv installer checksum did not match the pinned value.",
+        "pinned_uv_unavailable": "Pinned uv {version} is unavailable after installation.",
+        "unsupported_platform": "Managed GUI runtime bootstrap is only supported on macOS and Windows.",
     },
     "zh": {
         "probe_description": "检测当前 Python 运行时是否可以启动 WEEX 图形界面。",
@@ -45,6 +63,14 @@ TEXTS = {
         "current_runtime_missing_modules": "当前 Python 运行时缺少 GUI 依赖：{modules}。",
         "managed_runtime_failed": "受管 GUI 运行时已经创建，但 Tk 仍然无法初始化。",
         "disabled": "环境变量已禁用受管 GUI 运行时 bootstrap。",
+        "explicit_runtime_required": (
+            "尚未安装受管 GUI 运行时。可以让 AI 询问并在你确认后代为安装；安装时会执行 "
+            "scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty 下载并校验固定版本运行时。"
+        ),
+        "managed_runtime_accept_help": "明确允许下载固定版本 uv 安装器和 Python 依赖以创建受管 GUI 运行时。",
+        "installer_hash_mismatch": "下载的 uv 安装器 checksum 与固定值不一致。",
+        "pinned_uv_unavailable": "安装后无法使用固定版本 uv {version}。",
+        "unsupported_platform": "受管 GUI 运行时 bootstrap 仅支持 macOS 和 Windows。",
     },
 }
 
@@ -79,8 +105,35 @@ def managed_venv_python() -> Path:
     return managed_venv_dir() / "bin" / "python"
 
 
+def _same_executable(left: str | Path, right: str | Path) -> bool:
+    left_path = Path(left)
+    right_path = Path(right)
+    try:
+        return left_path.samefile(right_path)
+    except OSError:
+        return left_path.resolve() == right_path.resolve()
+
+
+def _is_managed_gui_executable(executable: str | Path, runtime_python: str | Path) -> bool:
+    if _same_executable(executable, runtime_python):
+        return True
+    if platform.system() == "Windows":
+        runtime_pythonw = Path(runtime_python).with_name("pythonw.exe")
+        return _same_executable(executable, runtime_pythonw)
+    return False
+
+
 def requirements_path() -> Path:
     return Path(__file__).resolve().parents[1] / "requirements.txt"
+
+
+def requirements_lock_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "requirements.lock"
+
+
+def managed_runtime_setup_command(os_family: Optional[str] = None) -> str:
+    launcher = "py -3" if (os_family or platform.system()) == "Windows" else "python3"
+    return f"{launcher} scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty"
 
 
 def _localized(language: str, key: str, **kwargs: object) -> str:
@@ -314,6 +367,20 @@ def _run_command(
     )
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _download_url_to_file(url: str, destination: Path) -> None:
+    request = urllib.request.Request(url, headers={"User-Agent": "weex-trader-skill-bootstrap"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        destination.write_bytes(response.read())
+
+
 def _raise_command_error(language: str, completed: subprocess.CompletedProcess[str]) -> None:
     detail = "\n".join(part for part in (completed.stdout.strip(), completed.stderr.strip()) if part)
     if detail:
@@ -326,15 +393,47 @@ def _uv_binary_from_install_dir() -> Path:
     return uv_install_dir() / name
 
 
-def _install_uv(language: str) -> Path:
-    existing = shutil.which("uv")
-    if existing:
-        return Path(existing)
+def _uv_version(uv_binary: Path) -> Optional[str]:
+    completed = _run_command([str(uv_binary), "--version"])
+    if completed.returncode != 0:
+        return None
+    parts = completed.stdout.strip().split()
+    if len(parts) >= 2 and parts[0] == "uv":
+        return parts[1]
+    return None
+
+
+def _installer_asset_for_platform(language: str) -> tuple[str, str]:
+    os_family = platform.system()
+    if os_family == "Windows":
+        asset = "uv-installer.ps1"
+    elif os_family == "Darwin":
+        asset = "uv-installer.sh"
+    else:
+        raise GuiBootstrapError(_localized(language, "unsupported_platform"))
+    return asset, PINNED_UV_INSTALLER_SHA256[os_family]
+
+
+def _install_uv(language: str, *, allow_network_install: bool = False) -> Path:
+    uv_binary = _uv_binary_from_install_dir()
+    if uv_binary.exists() and _uv_version(uv_binary) == PINNED_UV_VERSION:
+        return uv_binary
+
+    if not allow_network_install:
+        raise GuiBootstrapError(_localized(language, "explicit_runtime_required"))
 
     uv_dir = uv_install_dir()
     uv_dir.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env["UV_UNMANAGED_INSTALL"] = str(uv_dir)
+    env["INSTALLER_NO_MODIFY_PATH"] = "1"
+
+    asset, expected_sha256 = _installer_asset_for_platform(language)
+    installer_path = uv_dir / f"uv-installer-{PINNED_UV_VERSION}{Path(asset).suffix}"
+    installer_url = f"{UV_RELEASE_BASE_URL}/{PINNED_UV_VERSION}/{asset}"
+    _download_url_to_file(installer_url, installer_path)
+    if _sha256_file(installer_path) != expected_sha256:
+        raise GuiBootstrapError(_localized(language, "installer_hash_mismatch"))
 
     if platform.system() == "Windows":
         command = [
@@ -342,23 +441,22 @@ def _install_uv(language: str) -> Path:
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",
-            "-Command",
-            "irm https://astral.sh/uv/install.ps1 | iex",
+            "-File",
+            str(installer_path),
         ]
     else:
-        command = ["/bin/sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]
+        command = ["/bin/sh", str(installer_path)]
 
     completed = _run_command(command, env=env)
     if completed.returncode != 0:
         _raise_command_error(language, completed)
 
-    uv_binary = _uv_binary_from_install_dir()
-    if not uv_binary.exists():
-        raise GuiBootstrapError(_localized(language, "bootstrap_failed"))
+    if not uv_binary.exists() or _uv_version(uv_binary) != PINNED_UV_VERSION:
+        raise GuiBootstrapError(_localized(language, "pinned_uv_unavailable", version=PINNED_UV_VERSION))
     return uv_binary
 
 
-def ensure_managed_gui_runtime(language: str) -> tuple[Path, RuntimeProbe, str]:
+def ensure_managed_gui_runtime(language: str, *, allow_network_install: bool = False) -> tuple[Path, RuntimeProbe, str]:
     runtime_python = managed_venv_python()
     action = "created"
     if runtime_python.exists():
@@ -367,7 +465,10 @@ def ensure_managed_gui_runtime(language: str) -> tuple[Path, RuntimeProbe, str]:
             return runtime_python, current_probe, "reused"
         action = "repaired"
 
-    uv_binary = _install_uv(language)
+    if not allow_network_install:
+        raise GuiBootstrapError(_localized(language, "explicit_runtime_required"))
+
+    uv_binary = _install_uv(language, allow_network_install=allow_network_install)
     env = os.environ.copy()
     env["UV_PYTHON_INSTALL_DIR"] = str(managed_python_install_dir())
     env.setdefault("UV_NO_PROGRESS", "1")
@@ -393,8 +494,9 @@ def ensure_managed_gui_runtime(language: str) -> tuple[Path, RuntimeProbe, str]:
             "install",
             "--python",
             str(runtime_python),
+            "--require-hashes",
             "-r",
-            str(requirements_path()),
+            str(requirements_lock_path()),
         ],
         env=env,
     )
@@ -417,19 +519,23 @@ def maybe_reexec_under_managed_gui_runtime(
 ) -> None:
     if platform.system() not in {"Windows", "Darwin"}:
         return
-    if os.getenv(BOOTSTRAP_ACTIVE_ENV) == "1":
-        return
-
-    current_probe = probe_runtime(sys.executable)
-    if current_probe.usable:
+    runtime_python = managed_venv_python()
+    if _is_managed_gui_executable(sys.executable, runtime_python):
+        os.environ[BOOTSTRAP_ACTIVE_ENV] = "1"
         return
     if os.getenv(BOOTSTRAP_DISABLE_ENV) == "1":
         raise SystemExit(_localized(language, "disabled"))
 
-    runtime_python, _probe, _action = ensure_managed_gui_runtime(language)
+    if not runtime_python.exists():
+        raise SystemExit(_localized(language, "explicit_runtime_required"))
+    managed_probe = probe_runtime(str(runtime_python))
+    if not managed_probe.usable:
+        raise SystemExit(
+            f"{_localized(language, 'explicit_runtime_required')}\n{managed_probe.summary(language)}"
+        )
     env = os.environ.copy()
     env[BOOTSTRAP_ACTIVE_ENV] = "1"
-    env["WEEX_GUI_RUNTIME_REASON"] = current_probe.reason
+    env["WEEX_GUI_RUNTIME_REASON"] = "managed_runtime_required"
     target = Path(entrypoint_path).resolve()
     relaunch_args = [str(runtime_python), str(target), *(argv if argv is not None else sys.argv[1:])]
     os.execve(str(runtime_python), relaunch_args, env)
@@ -446,12 +552,17 @@ def build_status_payload(language: str) -> dict[str, Any]:
         "managed_venv": str(managed_venv_dir()),
         "managed_python": str(managed_venv_python()),
         "requirements_path": str(requirements_path()),
+        "requirements_lock_path": str(requirements_lock_path()),
+        "setup_command": managed_runtime_setup_command(),
     }
     return payload
 
 
-def ensure_status_payload(language: str) -> dict[str, Any]:
-    runtime_python, probe, action = ensure_managed_gui_runtime(language)
+def ensure_status_payload(language: str, *, allow_network_install: bool = False) -> dict[str, Any]:
+    runtime_python, probe, action = ensure_managed_gui_runtime(
+        language,
+        allow_network_install=allow_network_install,
+    )
     payload = build_status_payload(language)
     payload["action"] = action
     payload["managed_python"] = str(runtime_python)
@@ -468,8 +579,13 @@ def _output_json(payload: dict[str, Any], pretty: bool) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--language", default=None, help="Optional zh/en language override.")
-    common.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+    common.add_argument("--language", default=argparse.SUPPRESS, help="Optional zh/en language override.")
+    common.add_argument(
+        "--pretty",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Pretty-print JSON output.",
+    )
 
     parser = argparse.ArgumentParser(
         description="Provision a managed Python runtime for WEEX GUI entrypoints.",
@@ -485,11 +601,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Inspect the current GUI runtime.",
         description="Inspect the current GUI runtime.",
     )
-    sub.add_parser(
+    ensure_parser = sub.add_parser(
         "ensure",
         parents=[common],
         help="Provision the managed GUI runtime.",
         description="Provision the managed GUI runtime.",
+    )
+    ensure_parser.add_argument(
+        "--accept-managed-runtime",
+        action="store_true",
+        help=TEXTS["en"]["managed_runtime_accept_help"],
     )
     return parser
 
@@ -501,7 +622,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.command == "probe":
         payload = build_status_payload(language)
     else:
-        payload = ensure_status_payload(language)
+        try:
+            payload = ensure_status_payload(language, allow_network_install=args.accept_managed_runtime)
+        except GuiBootstrapError as exc:
+            payload = {"ok": False, "error": str(exc)}
+            if not args.accept_managed_runtime:
+                payload["requires_user_consent"] = True
+                payload["setup_command"] = managed_runtime_setup_command()
+            _output_json(payload, args.pretty)
+            return 1
     _output_json(payload, args.pretty)
     return 0
 

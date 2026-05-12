@@ -1,7 +1,7 @@
 ---
 name: weex-trader-skill
 description: Use when the user wants WEEX REST automation for contract or spot trading, market or account queries, or secure saved-profile setup and management.
-compatibility: Requires Python with requirements.txt installed, network access for WEEX REST calls, and Tk support or the managed GUI runtime for GUI profile and vault flows.
+compatibility: Requires Python with requirements.lock installed, network access for WEEX REST calls, and Tk through an explicitly prepared managed GUI runtime for Windows/macOS GUI profile and vault flows.
 ---
 
 # WEEX Trader Skill
@@ -9,7 +9,7 @@ compatibility: Requires Python with requirements.txt installed, network access f
 Read `manifest.json` for routing rules. Open `file-index.json` only for file-level guidance.
 For every turn that uses this skill, before routing or UI launch, AI must run `scripts/weex_agent_state.py --command skill.preflight --language <zh|en> --pretty` so `agent-init.json` and `agent-runtime.json` stay fresh.
 Before any private profile, vault, or trading action, inspect the preflight output and stop if `runtime.host.requirements_ready` is `false`, `runtime.host.missing_modules` is non-empty, or `runtime.env_validation.ok` is `false`.
-On Windows and macOS, preflight can auto-prepare a managed GUI runtime when Tk is unavailable. Use `scripts/weex_gui_launcher.py` for explicit detached launch.
+On Windows and macOS, GUI profile and vault flows must use the managed GUI runtime. AI must not launch GUI entrypoints with the system, miniforge, pyenv, Homebrew, or OS Python even if that interpreter passes Tk or dependency probes. System interpreters may run preflight and the managed-runtime bootstrap only; they are not valid GUI runtimes. Preflight reports whether the managed GUI runtime is ready but must not download or install it implicitly. If `init.host.gui_runtime.action` is `explicit_setup_required`, explain the pinned uv/Python/dependency setup and checksum/hash verification, ask whether AI should install it, and only after clear user approval run `init.host.gui_runtime.setup_command` / `scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty`. Use `scripts/weex_gui_launcher.py` for detached launch after runtime setup is ready.
 
 ## Core Entry Points
 
@@ -47,13 +47,13 @@ These auto-detect language from `agent-init.json`.
 
 ## Runtime Prerequisites
 
-- Profile, vault, other private-account flows, and API-definition regeneration require `requirements.txt`
+- Profile, vault, other private-account flows, and API-definition regeneration require the hashed dependencies in `requirements.lock`
 - Windows uses `py -3`; macOS/Linux uses `python3`
 - For one-command local runtime setup, run `scripts/weex_runtime_setup.py --pretty` with the OS-appropriate launcher before private CLI usage
-- If `cryptography` or another dependency is missing, install `requirements.txt` with the same interpreter and retry
+- If `cryptography` or another dependency is missing, install `requirements.lock` with `--require-hashes` using the same interpreter and retry
 - Private contract and spot CLIs now auto-attempt `scripts/weex_runtime_setup.py` with the current interpreter when required Python dependencies are missing
 - `skill.preflight` also validates `WEEX_API_TIMEOUT` plus any `WEEX_*_API_BASE` overrides; private contract/spot commands now fail fast until those issues are fixed
-- If `tkinter` is unavailable, use the terminal profile manager
+- Windows/macOS GUI flows ignore system `tkinter` availability and require the managed GUI runtime; if the user declines managed-runtime setup, use the terminal profile manager instead of launching a GUI
 - If `agent-init.json` is missing and AI is about to use an auto-language wrapper, refresh `skill.preflight` first instead of guessing
 
 ## Profile Policy
@@ -66,8 +66,8 @@ These auto-detect language from `agent-init.json`.
   - `api_secret`: required; WEEX Secret Key for signing private requests
   - `api_passphrase`: required; WEEX API Passphrase paired with the key and secret
   - description / note: optional metadata for account purpose or permissions
-  - `contract_base_url`: optional; leave empty for the official contract REST host `https://api-contract.weex.com`
-  - `spot_base_url`: optional; leave empty for the official spot REST host `https://api-spot.weex.com`
+  - `contract_base_url`: optional; leave empty for the official contract REST host `https://api-contract.weex.com`; custom values must be full `https://` URLs on `weex.com`, `*.weex.com`, `weex.tech`, or `*.weex.tech`
+  - `spot_base_url`: optional; leave empty for the official spot REST host `https://api-spot.weex.com`; custom values must be full `https://` URLs on `weex.com`, `*.weex.com`, `weex.tech`, or `*.weex.tech`
 - Do not frame this as only the minimum fields needed to make private endpoints work; explain meaning, requiredness, and blank-value behavior for every field
 - For terminal entry, also explain `--prompt-secrets`, `--api-key-env` / `--api-secret-env` / `--api-passphrase-env`, and `--secrets-stdin-json`
 - Before edit/delete/default changes, inspect current accounts with `list --pretty`, unless the user explicitly asked to open the GUI first
@@ -80,7 +80,7 @@ These auto-detect language from `agent-init.json`.
 - Windows/macOS: prefer the visual profile manager first
 - The profile manager uses the shared application vault on all platforms
 - On Windows/macOS, the GUI exposes that shared application vault through a global vault control area separate from per-profile credential fields
-- When AI launches a GUI from a non-interactive or tool-managed shell on Windows/macOS, prefer `scripts/weex_gui_launcher.py`, or rely on the GUI entrypoints' built-in auto-detach behavior instead of `nohup ... &`; this path is preferred when you want the GUI without an extra Terminal/cmd window
+- When AI launches a GUI from a non-interactive or tool-managed shell on Windows/macOS, use `scripts/weex_gui_launcher.py` after preflight shows the managed GUI runtime is ready; this path launches the GUI with the managed runtime and avoids an extra Terminal/cmd window
 - Windows/macOS vault setup or unlock: AI should launch the vault UI, not terminal prompts
 - Linux interactive use: prefer the Linux wizard or terminal profile manager
 - Linux headless/server use: prefer the encrypted vault flow first

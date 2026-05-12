@@ -15,15 +15,17 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import urlparse
 
 from weex_gui_bootstrap import (
     BOOTSTRAP_DISABLE_ENV,
-    GuiBootstrapError,
-    ensure_managed_gui_runtime,
+    _localized as gui_bootstrap_localized,
+    managed_runtime_setup_command,
+    managed_venv_python,
     probe_runtime,
+    requirements_lock_path,
 )
 from weex_profile_language import resolve_language_with_source
+from weex_url_policy import BaseUrlPolicyError, validate_weex_base_url
 
 
 CONFIG_HOME_ENV = "WEEX_TRADER_SKILL_HOME"
@@ -189,26 +191,40 @@ def _prepare_gui_runtime(
         "available": True,
         "disabled": disabled,
         "attempted": False,
-        "ready": tkinter_available,
-        "action": "system_runtime" if tkinter_available else None,
+        "ready": False,
+        "action": None,
+        "requires_user_consent": False,
+        "setup_command": managed_runtime_setup_command(os_family),
         "managed_python_executable": None,
         "managed_probe": None,
         "error": None,
     }
-    if tkinter_available or disabled:
+    if disabled:
         return payload
 
-    payload["attempted"] = True
-    try:
-        runtime_python, managed_probe, action = ensure_managed_gui_runtime(language)
-    except GuiBootstrapError as exc:
+    runtime_python = managed_venv_python()
+    if not runtime_python.exists():
         payload["ready"] = False
-        payload["action"] = "failed"
-        payload["error"] = str(exc)
+        payload["action"] = "explicit_setup_required"
+        payload["requires_user_consent"] = True
+        payload["error"] = gui_bootstrap_localized(language, "explicit_runtime_required")
+        return payload
+
+    managed_probe = probe_runtime(str(runtime_python))
+    if not managed_probe.usable:
+        payload["ready"] = False
+        payload["action"] = "explicit_setup_required"
+        payload["requires_user_consent"] = True
+        payload["managed_python_executable"] = str(runtime_python)
+        payload["managed_probe"] = managed_probe.to_dict()
+        payload["error"] = (
+            f"{gui_bootstrap_localized(language, 'explicit_runtime_required')}\n"
+            f"{managed_probe.summary(language)}"
+        )
         return payload
 
     payload["ready"] = True
-    payload["action"] = action
+    payload["action"] = "reused"
     payload["managed_python_executable"] = str(runtime_python)
     payload["managed_probe"] = managed_probe.to_dict()
     return payload
@@ -229,8 +245,9 @@ def _detect_gui_available(
     tkinter_available: bool,
     gui_runtime: Optional[dict[str, Any]],
 ) -> bool:
+    del tkinter_available
     if os_family in {"Windows", "Darwin"}:
-        return tkinter_available or bool((gui_runtime or {}).get("ready"))
+        return bool((gui_runtime or {}).get("ready"))
     return False
 
 
@@ -350,9 +367,10 @@ def validate_runtime_environment(env: Optional[dict[str, str]] = None) -> dict[s
         raw_url = _clean_text(source.get(env_name))
         if not raw_url:
             continue
-        parsed = urlparse(raw_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            issues.append(f"{env_name} must be a full http/https URL; got {raw_url!r}.")
+        try:
+            validate_weex_base_url(raw_url, label=env_name)
+        except BaseUrlPolicyError as exc:
+            issues.append(str(exc))
 
     return {
         "ok": not issues,
@@ -362,7 +380,7 @@ def validate_runtime_environment(env: Optional[dict[str, str]] = None) -> dict[s
 
 def _dependency_install_command(os_family: Optional[str] = None) -> str:
     launcher = _launcher_for_os(os_family or platform.system())
-    return f"{launcher} -m pip install -r {requirements_path()}"
+    return f"{launcher} -m pip install --require-hashes -r {requirements_lock_path()}"
 
 
 def _run_runtime_setup(language: Optional[str] = None) -> dict[str, Any]:

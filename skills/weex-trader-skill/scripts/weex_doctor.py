@@ -18,6 +18,7 @@ from weex_gui_bootstrap import (
     RuntimeProbe,
     bootstrap_root,
     ensure_managed_gui_runtime,
+    managed_runtime_setup_command,
     managed_venv_python,
     probe_runtime,
 )
@@ -29,12 +30,16 @@ TEXTS = {
         "parser_description": "Diagnose and repair common WEEX skill runtime problems.",
         "pretty_help": "Pretty-print JSON output for easier reading",
         "gui_help": "Inspect GUI runtime readiness",
-        "gui_description": "Inspect the current GUI runtime, managed fallback runtime, and optionally repair GUI bootstrap state.",
-        "gui_fix_help": "Provision or repair the managed GUI runtime when the current interpreter is not GUI-safe",
+        "gui_description": "Inspect the current Python runtime, required managed GUI runtime, and optionally repair GUI bootstrap state.",
+        "gui_fix_help": "Provision or repair the required managed GUI runtime",
+        "gui_accept_help": "Allow the GUI doctor to download the pinned managed GUI runtime when --fix is used",
         "status_ok_system": "GUI is healthy on the current Python runtime.",
-        "status_ok_managed": "GUI fallback is healthy through the managed runtime.",
+        "status_ok_managed": "The required managed GUI runtime is ready.",
         "status_not_ready": "GUI is not ready yet.",
-        "recommend_fix": "Run this command again with --fix to provision the managed GUI runtime.",
+        "recommend_fix": (
+            "Ask the AI to install the managed GUI runtime; after your confirmation it will run "
+            "scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty."
+        ),
         "recommend_retry_gui": "Retry the same GUI entrypoint; it should auto-relaunch inside the managed runtime.",
         "recommend_disable": f"{BOOTSTRAP_DISABLE_ENV}=1 is set. Clear it or use terminal flows instead.",
         "recommend_linux": "GUI doctor is intended for Windows/macOS Tk issues. Use the terminal onboarding path on Linux.",
@@ -59,12 +64,16 @@ TEXTS = {
         "parser_description": "诊断并修复常见的 WEEX 技能运行时问题。",
         "pretty_help": "以更易读的格式输出 JSON",
         "gui_help": "检查 GUI 运行时状态",
-        "gui_description": "检查当前 GUI 运行时、受管兜底运行时，并在需要时修复 GUI bootstrap 状态。",
-        "gui_fix_help": "当当前解释器不适合启动 GUI 时，创建或修复受管 GUI 运行时",
+        "gui_description": "检查当前 Python 运行时、必需的受管 GUI 运行时，并在需要时修复 GUI bootstrap 状态。",
+        "gui_fix_help": "创建或修复必需的受管 GUI 运行时",
+        "gui_accept_help": "配合 --fix 使用，允许 GUI doctor 下载固定版本的受管 GUI 运行时",
         "status_ok_system": "当前 Python 运行时的 GUI 状态正常。",
-        "status_ok_managed": "受管 GUI 运行时已经可用，可以作为兜底运行时。",
+        "status_ok_managed": "必需的受管 GUI 运行时已经可用。",
         "status_not_ready": "GUI 运行时当前还没有就绪。",
-        "recommend_fix": "请带上 --fix 再执行一次这个命令，创建受管 GUI 运行时。",
+        "recommend_fix": (
+            "可以让 AI 询问并在你确认后代为安装受管 GUI 运行时；安装时会执行 "
+            "scripts/weex_gui_bootstrap.py ensure --accept-managed-runtime --pretty。"
+        ),
         "recommend_retry_gui": "请重新启动同一个 GUI 入口；它会自动切换到受管运行时。",
         "recommend_disable": f"检测到 {BOOTSTRAP_DISABLE_ENV}=1。请清除这个环境变量，或者改用终端流程。",
         "recommend_linux": "这个 GUI doctor 主要用于 Windows/macOS 的 Tk 问题；Linux 请使用终端 onboarding 流程。",
@@ -147,14 +156,14 @@ def _build_recommendation(
         return t(language, "recommend_disable")
     if fix_attempted and fix_succeeded:
         return t(language, "recommend_retry_gui")
-    if ok and current_probe.usable:
-        return t(language, "status_ok_system")
     if ok and managed_status["usable"]:
         return t(language, "recommend_retry_gui")
+    if ok and current_probe.usable:
+        return t(language, "status_ok_system")
     return t(language, "recommend_fix")
 
 
-def build_gui_report(language: str, *, fix: bool) -> dict[str, Any]:
+def build_gui_report(language: str, *, fix: bool, accept_managed_runtime: bool = False) -> dict[str, Any]:
     resolved_language = resolve_language(language)
     os_family = platform.system()
     current_probe = probe_runtime(sys.executable)
@@ -163,11 +172,16 @@ def build_gui_report(language: str, *, fix: bool) -> dict[str, Any]:
     fix_attempted = False
     fix_result = None
     fix_error = None
+    managed_required = os_family in {"Windows", "Darwin"}
+    managed_ready = bool(managed_status["usable"])
 
-    if fix and os_family in {"Windows", "Darwin"} and not current_probe.usable and not bootstrap_disabled:
+    if fix and managed_required and not managed_ready and not bootstrap_disabled:
         fix_attempted = True
         try:
-            runtime_python, managed_probe, action = ensure_managed_gui_runtime(resolved_language)
+            runtime_python, managed_probe, action = ensure_managed_gui_runtime(
+                resolved_language,
+                allow_network_install=accept_managed_runtime,
+            )
         except GuiBootstrapError as exc:
             fix_result = "failed"
             fix_error = str(exc)
@@ -183,11 +197,18 @@ def build_gui_report(language: str, *, fix: bool) -> dict[str, Any]:
                 refresh_agent_records(preferred_language=resolved_language, command="doctor.gui.fix")
             except Exception:
                 pass
-    elif fix and bootstrap_disabled and not current_probe.usable:
+    elif fix and bootstrap_disabled and managed_required and not managed_ready:
         fix_attempted = True
         fix_result = "disabled"
 
-    ok = current_probe.usable or bool(managed_status["usable"])
+    managed_ready = bool(managed_status["usable"])
+    ok = managed_ready if managed_required else current_probe.usable
+    requires_user_consent = (
+        managed_required
+        and not ok
+        and not bootstrap_disabled
+        and (not fix_attempted or not accept_managed_runtime)
+    )
     recommendation = _build_recommendation(
         resolved_language,
         os_family=os_family,
@@ -199,10 +220,10 @@ def build_gui_report(language: str, *, fix: bool) -> dict[str, Any]:
         fix_succeeded=bool(ok and fix_result in {"created", "repaired", "reused"}),
     )
 
-    if current_probe.usable:
-        summary = t(resolved_language, "status_ok_system")
-    elif managed_status["usable"]:
+    if managed_required and managed_status["usable"]:
         summary = t(resolved_language, "status_ok_managed")
+    elif not managed_required and current_probe.usable:
+        summary = t(resolved_language, "status_ok_system")
     else:
         summary = t(resolved_language, "status_not_ready")
 
@@ -221,6 +242,8 @@ def build_gui_report(language: str, *, fix: bool) -> dict[str, Any]:
             "probe": _probe_payload(current_probe),
         },
         "managed_runtime": managed_status,
+        "requires_user_consent": requires_user_consent,
+        "setup_command": managed_runtime_setup_command(os_family),
         "fix": {
             "requested": fix,
             "attempted": fix_attempted,
@@ -270,7 +293,11 @@ def render_gui_report(language: str, payload: dict[str, Any]) -> str:
 
 
 def cmd_gui(args: argparse.Namespace, language: str) -> int:
-    payload = build_gui_report(language, fix=args.fix)
+    payload = build_gui_report(
+        language,
+        fix=args.fix,
+        accept_managed_runtime=args.accept_managed_runtime,
+    )
     if args.pretty:
         output_json(payload, pretty=True)
     else:
@@ -293,6 +320,7 @@ def build_parser(language: str) -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p_gui.add_argument("--fix", action="store_true", help=t(language, "gui_fix_help"))
+    p_gui.add_argument("--accept-managed-runtime", action="store_true", help=t(language, "gui_accept_help"))
     p_gui.add_argument("--pretty", action="store_true", help=t(language, "pretty_help"))
     return parser
 

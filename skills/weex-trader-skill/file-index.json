@@ -115,19 +115,32 @@
         "resolve_language"
       ]
     },
+    "scripts/weex_url_policy.py": {
+      "role": "Shared allowlist and shape validation for WEEX REST base URLs.",
+      "when": [
+        "validating custom contract or spot REST hosts",
+        "checking WEEX_API_BASE and market-specific API base overrides",
+        "rejecting non-WEEX hosts before credentials are loaded or signed"
+      ],
+      "surface": [
+        "validate_weex_base_url",
+        "is_allowed_weex_hostname"
+      ]
+    },
     "scripts/weex_gui_bootstrap.py": {
       "role": "Managed GUI runtime bootstrap for macOS and Windows entrypoints.",
       "when": [
         "Tk crashes before the GUI opens",
         "current interpreter lacks tkinter",
-        "manual GUI runtime repair",
-        "auto-relaunch into a managed Python virtual environment"
+        "explicit GUI runtime repair with --accept-managed-runtime",
+        "validated reuse of a managed Python virtual environment"
       ],
       "surface": [
         "probe",
         "ensure",
         "probe_runtime",
         "ensure_managed_gui_runtime",
+        "managed_runtime_setup_command",
         "maybe_reexec_under_managed_gui_runtime"
       ]
     },
@@ -168,13 +181,14 @@
     "scripts/weex_runtime_setup.py": {
       "role": "Cross-platform one-command runtime setup helper for the current Python interpreter.",
       "when": [
-        "installing requirements.txt into the active interpreter",
+        "installing requirements.lock into the active interpreter with hash verification",
         "repairing a missing pip via ensurepip before installation",
         "preparing private contract or spot CLI prerequisites"
       ],
       "depends_on": [
         "scripts/weex_agent_state.py",
-        "requirements.txt"
+        "requirements.txt",
+        "requirements.lock"
       ],
       "surface": [
         "build_setup_report",
@@ -501,11 +515,20 @@
       ]
     },
     "requirements.txt": {
-      "role": "Python runtime dependencies required by profile, vault, and private trading flows.",
+      "role": "Human-edited Python dependency input constraints required by profile, vault, and private trading flows.",
+      "when": [
+        "dependency constraints need to change",
+        "regenerating requirements.lock",
+        "reviewing top-level runtime dependency intent"
+      ]
+    },
+    "requirements.lock": {
+      "role": "Hashed Python dependency lockfile used for runtime and managed GUI installation.",
       "when": [
         "a Python dependency such as cryptography is missing",
         "setting up a fresh interpreter on Windows, macOS, or Linux",
-        "verifying prerequisites for private-account commands"
+        "verifying prerequisites for private-account commands",
+        "installing the managed GUI runtime"
       ]
     },
     "references/contract-api-definitions.json": {

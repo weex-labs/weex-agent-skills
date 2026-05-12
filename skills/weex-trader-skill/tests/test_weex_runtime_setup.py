@@ -18,7 +18,7 @@ import weex_runtime_setup as runtime_setup  # noqa: E402
 
 
 class RuntimeSetupTests(unittest.TestCase):
-    def test_build_setup_report_installs_requirements_with_current_interpreter(self) -> None:
+    def test_build_setup_report_installs_locked_requirements_with_current_interpreter(self) -> None:
         completed = [
             mock.Mock(returncode=0, stdout="pip 24.0", stderr=""),
             mock.Mock(returncode=0, stdout="installed", stderr=""),
@@ -57,8 +57,9 @@ class RuntimeSetupTests(unittest.TestCase):
                 "pip",
                 "install",
                 "--disable-pip-version-check",
+                "--require-hashes",
                 "-r",
-                str(runtime_setup.requirements_path()),
+                str(runtime_setup.requirements_lock_path()),
             ],
         )
 

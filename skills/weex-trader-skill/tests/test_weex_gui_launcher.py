@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -19,6 +21,56 @@ import weex_gui_launcher as gui_launcher  # noqa: E402
 
 
 class GuiLauncherTests(unittest.TestCase):
+    def test_main_returns_structured_error_when_managed_runtime_is_missing(self) -> None:
+        with mock.patch.object(gui_launcher, "launch_detached_entrypoint", side_effect=gui_launcher.GuiLaunchError("managed missing")):
+            stream = io.StringIO()
+            with mock.patch.object(sys, "stdout", stream):
+                exit_code = gui_launcher.main(["profile-manager", "--pretty"])
+
+        self.assertEqual(exit_code, 1)
+        payload = json.loads(stream.getvalue())
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"], "managed missing")
+
+    def test_main_honors_top_level_language_and_pretty_options(self) -> None:
+        with mock.patch.object(gui_launcher, "launch_detached_entrypoint", side_effect=gui_launcher.GuiLaunchError("managed missing")) as launch_mock:
+            stream = io.StringIO()
+            with mock.patch.object(sys, "stdout", stream):
+                exit_code = gui_launcher.main(["--language", "zh", "--pretty", "profile-manager"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(launch_mock.call_args.args[0], "zh")
+        text = stream.getvalue()
+        self.assertIn("\n  ", text)
+        self.assertEqual(json.loads(text)["error"], "managed missing")
+
+    def test_launch_detached_entrypoint_requires_and_uses_managed_python(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            entrypoint_path = temp_root / "entrypoint.py"
+            managed_python = temp_root / "gui-runtime" / "bin" / "python"
+            entrypoint_path.write_text("print('ok')\n", encoding="utf-8")
+            managed_python.parent.mkdir(parents=True)
+            managed_python.write_text("", encoding="utf-8")
+            managed_probe = mock.Mock(usable=True)
+
+            with mock.patch.object(gui_launcher.platform, "system", return_value="Darwin"):
+                with mock.patch.object(gui_launcher, "managed_venv_python", return_value=managed_python, create=True):
+                    with mock.patch.object(gui_launcher, "probe_runtime", return_value=managed_probe, create=True):
+                        with mock.patch.object(gui_launcher, "_launch_on_darwin", return_value={"ok": True}) as launch_mock:
+                            payload = gui_launcher.launch_detached_entrypoint(
+                                "en",
+                                entrypoint_path=entrypoint_path,
+                                argv=[],
+                                label="profile-manager",
+                                wait_timeout=0.1,
+                            )
+
+        self.assertEqual(payload, {"ok": True})
+        launch_mock.assert_called_once()
+        self.assertIn("python_executable", launch_mock.call_args.kwargs)
+        self.assertEqual(launch_mock.call_args.kwargs["python_executable"], managed_python)
+
     def test_launch_on_darwin_uses_app_bundle_instead_of_command_wrapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)

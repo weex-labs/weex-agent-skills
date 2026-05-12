@@ -16,6 +16,12 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+from weex_gui_bootstrap import (
+    BOOTSTRAP_ACTIVE_ENV,
+    _localized as gui_bootstrap_localized,
+    managed_venv_python,
+    probe_runtime,
+)
 from weex_profile_language import resolve_language
 
 
@@ -217,6 +223,19 @@ def _process_exists(pid: int) -> bool:
     return True
 
 
+def _require_managed_gui_python(language: str) -> Path:
+    runtime_python = managed_venv_python()
+    if not runtime_python.exists():
+        raise GuiLaunchError(gui_bootstrap_localized(language, "explicit_runtime_required"))
+    managed_probe = probe_runtime(str(runtime_python))
+    if not managed_probe.usable:
+        raise GuiLaunchError(
+            f"{gui_bootstrap_localized(language, 'explicit_runtime_required')}\n"
+            f"{managed_probe.summary(language)}"
+        )
+    return runtime_python
+
+
 def _wait_for_pid(path: Path, timeout: float) -> Optional[int]:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -243,6 +262,7 @@ def _launch_on_darwin(
     argv: list[str],
     label: str,
     wait_timeout: float,
+    python_executable: str | Path | None = None,
 ) -> dict[str, object]:
     open_binary = shutil_which("open")
     if not open_binary:
@@ -255,9 +275,10 @@ def _launch_on_darwin(
     launcher_path = macos_dir / "launcher"
     plist_path = contents_dir / "Info.plist"
     macos_dir.mkdir(parents=True, exist_ok=True)
+    runtime_python = Path(python_executable) if python_executable is not None else Path(sys.executable)
     command_line = " ".join(
         shlex.quote(part)
-        for part in [sys.executable, str(entrypoint_path), *argv]
+        for part in [str(runtime_python), str(entrypoint_path), *argv]
     )
     launcher_path.write_text(
         "\n".join(
@@ -266,6 +287,7 @@ def _launch_on_darwin(
                 "set -eu",
                 f"cd {shlex.quote(str(entrypoint_path.parent))}",
                 f"export {DETACHED_ENV}=1",
+                f"export {BOOTSTRAP_ACTIVE_ENV}=1",
                 f"echo $$ > {shlex.quote(str(pid_path))}",
                 f"exec {command_line} >> {shlex.quote(str(log_path))} 2>&1",
                 "",
@@ -324,7 +346,7 @@ def _launch_on_darwin(
         "platform": "Darwin",
         "target": label,
         "entrypoint": str(entrypoint_path),
-        "python": sys.executable,
+        "python": str(runtime_python),
         "wrapper_path": str(wrapper_path),
         "launcher_path": str(launcher_path),
         "log_path": str(log_path),
@@ -340,15 +362,17 @@ def _launch_on_windows(
     argv: list[str],
     label: str,
     wait_timeout: float,
+    python_executable: str | Path | None = None,
 ) -> dict[str, object]:
     del wait_timeout
     wrapper_base, log_path, pid_path = _next_launch_paths(label)
-    wrapper_path = Path(sys.executable)
+    wrapper_path = Path(python_executable) if python_executable is not None else Path(sys.executable)
     pythonw_path = wrapper_path.with_name("pythonw.exe")
     if pythonw_path.exists():
         wrapper_path = pythonw_path
     env = os.environ.copy()
     env[DETACHED_ENV] = "1"
+    env[BOOTSTRAP_ACTIVE_ENV] = "1"
     creationflags = (
         getattr(subprocess, "DETACHED_PROCESS", 0)
         | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
@@ -396,20 +420,24 @@ def launch_detached_entrypoint(
     relaunch_argv = _prepare_relaunch_argv(resolved_language, argv)
     os_name = platform.system()
     if os_name == "Darwin":
+        runtime_python = _require_managed_gui_python(resolved_language)
         return _launch_on_darwin(
             resolved_language,
             entrypoint_path=target,
             argv=relaunch_argv,
             label=label,
             wait_timeout=wait_timeout,
+            python_executable=runtime_python,
         )
     if os_name == "Windows":
+        runtime_python = _require_managed_gui_python(resolved_language)
         return _launch_on_windows(
             resolved_language,
             entrypoint_path=target,
             argv=relaunch_argv,
             label=label,
             wait_timeout=wait_timeout,
+            python_executable=runtime_python,
         )
     raise GuiLaunchError(t(resolved_language, "unsupported_platform"))
 
@@ -424,13 +452,16 @@ def maybe_detach_gui_entrypoint(
 ) -> None:
     if not should_auto_detach():
         return
-    launch_detached_entrypoint(
-        language,
-        entrypoint_path=entrypoint_path,
-        argv=argv,
-        label=label,
-        wait_timeout=wait_timeout,
-    )
+    try:
+        launch_detached_entrypoint(
+            language,
+            entrypoint_path=entrypoint_path,
+            argv=argv,
+            label=label,
+            wait_timeout=wait_timeout,
+        )
+    except GuiLaunchError as exc:
+        raise SystemExit(str(exc)) from exc
     raise SystemExit(0)
 
 
@@ -474,18 +505,28 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         help=TEXTS["en"]["profile_manager_help"],
     )
-    p_profile.add_argument("--language", default=None, help=argparse.SUPPRESS)
-    p_profile.add_argument("--pretty", action="store_true", help=TEXTS["en"]["pretty_help"])
-    p_profile.add_argument("--wait-timeout", type=float, default=DEFAULT_WAIT_TIMEOUT, help=argparse.SUPPRESS)
+    p_profile.add_argument("--language", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_profile.add_argument(
+        "--pretty",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help=TEXTS["en"]["pretty_help"],
+    )
+    p_profile.add_argument("--wait-timeout", type=float, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
 
     p_vault = sub.add_parser(
         "vault-manager",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         help=TEXTS["en"]["vault_manager_help"],
     )
-    p_vault.add_argument("--language", default=None, help=argparse.SUPPRESS)
-    p_vault.add_argument("--pretty", action="store_true", help=TEXTS["en"]["pretty_help"])
-    p_vault.add_argument("--wait-timeout", type=float, default=DEFAULT_WAIT_TIMEOUT, help=argparse.SUPPRESS)
+    p_vault.add_argument("--language", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_vault.add_argument(
+        "--pretty",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help=TEXTS["en"]["pretty_help"],
+    )
+    p_vault.add_argument("--wait-timeout", type=float, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_vault.add_argument(
         "--requested-action",
         choices=SUPPORTED_VAULT_ACTIONS,
@@ -502,15 +543,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     relaunch_argv = []
     if args.target == "vault-manager" and args.requested_action:
         relaunch_argv.extend(["--requested-action", args.requested_action])
-    payload = launch_detached_entrypoint(
-        language,
-        entrypoint_path=_target_entrypoint(args.target),
-        argv=relaunch_argv,
-        label=args.target,
-        wait_timeout=float(args.wait_timeout),
-    )
-    _output_json(payload, args.pretty)
-    return 0
+    try:
+        payload = launch_detached_entrypoint(
+            language,
+            entrypoint_path=_target_entrypoint(args.target),
+            argv=relaunch_argv,
+            label=args.target,
+            wait_timeout=float(args.wait_timeout),
+        )
+    except GuiLaunchError as exc:
+        _output_json({"ok": False, "error": str(exc)}, args.pretty)
+        return 1
+    else:
+        _output_json(payload, args.pretty)
+        return 0
 
 
 if __name__ == "__main__":
