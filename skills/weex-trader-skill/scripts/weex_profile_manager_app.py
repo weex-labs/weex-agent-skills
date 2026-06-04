@@ -893,6 +893,12 @@ class ProfileManagerApp:
         self.account_surface_locked = False
         self.mode_badge = None
         self.credential_badge = None
+        self.api_key_entry = None
+        self.api_secret_entry = None
+        self.api_passphrase_entry = None
+        self._secret_placeholder_fields: set[str] = set()
+        self.current_api_key_hint = ""
+        self.current_profile_has_saved_credentials = False
         self.description_buffer = ""
         self.help_bubble = None
         self.help_bubble_key: Optional[tuple[str, str]] = None
@@ -1049,6 +1055,89 @@ class ProfileManagerApp:
             highlightbackground=PALETTE["input_border"],
             highlightcolor=PALETTE["accent"],
         )
+
+    def _ensure_secret_placeholder_state(self) -> None:
+        if not hasattr(self, "_secret_placeholder_fields"):
+            self._secret_placeholder_fields = set()
+        if not hasattr(self, "current_api_key_hint"):
+            self.current_api_key_hint = ""
+        if not hasattr(self, "current_profile_has_saved_credentials"):
+            self.current_profile_has_saved_credentials = False
+
+    def _secret_var(self, field: str) -> tk.StringVar:
+        return getattr(self, f"{field}_var")
+
+    def _secret_entry(self, field: str) -> Optional[tk.Entry]:
+        return getattr(self, f"{field}_entry", None)
+
+    def _secret_placeholder_text(self, field: str, api_key_hint: str = "") -> str:
+        if field == "api_key" and api_key_hint:
+            return self.local_text(
+                f"Saved ({api_key_hint}, leave blank to keep)",
+                f"已保存（{api_key_hint}，留空不修改）",
+            )
+        return self.local_text("Saved (leave blank to keep)", "已保存（留空不修改）")
+
+    def _configure_secret_entry_placeholder(self, field: str, active: bool) -> None:
+        entry = self._secret_entry(field)
+        if entry is None:
+            return
+        try:
+            entry.configure(
+                show="" if active else "*",
+                fg=PALETTE["muted"] if active else PALETTE["input_text"],
+            )
+        except Exception:
+            return
+
+    def _register_secret_entry(self, field: str, entry: tk.Entry) -> None:
+        self._ensure_secret_placeholder_state()
+        setattr(self, f"{field}_entry", entry)
+        entry.bind("<FocusIn>", lambda _event, secret_field=field: self._activate_secret_entry(secret_field))
+        entry.bind("<FocusOut>", lambda _event, secret_field=field: self._restore_secret_placeholder_if_empty(secret_field))
+        self._configure_secret_entry_placeholder(field, field in self._secret_placeholder_fields)
+
+    def _activate_secret_entry(self, field: str) -> None:
+        self._ensure_secret_placeholder_state()
+        if field in self._secret_placeholder_fields:
+            self._secret_placeholder_fields.discard(field)
+            self._secret_var(field).set("")
+        self._configure_secret_entry_placeholder(field, active=False)
+
+    def _restore_secret_placeholder_if_empty(self, field: str) -> None:
+        self._ensure_secret_placeholder_state()
+        if not self.current_profile_id or not self.current_profile_has_saved_credentials:
+            return
+        if str(self._secret_var(field).get() or "").strip():
+            return
+        self._secret_var(field).set(self._secret_placeholder_text(field, self.current_api_key_hint))
+        self._secret_placeholder_fields.add(field)
+        self._configure_secret_entry_placeholder(field, active=True)
+
+    def _show_saved_secret_placeholders(self, api_key_hint: str) -> None:
+        self._ensure_secret_placeholder_state()
+        self.current_api_key_hint = api_key_hint
+        self.current_profile_has_saved_credentials = True
+        for field in ("api_key", "api_secret", "api_passphrase"):
+            self._secret_var(field).set(self._secret_placeholder_text(field, api_key_hint))
+            self._secret_placeholder_fields.add(field)
+            self._configure_secret_entry_placeholder(field, active=True)
+
+    def _clear_secret_placeholders(self) -> None:
+        self._ensure_secret_placeholder_state()
+        self._secret_placeholder_fields.clear()
+        self.current_api_key_hint = ""
+        self.current_profile_has_saved_credentials = False
+        for field in ("api_key", "api_secret", "api_passphrase"):
+            self._secret_var(field).set("")
+            self._configure_secret_entry_placeholder(field, active=False)
+
+    def _secret_value_for_save(self, field: str) -> Optional[str]:
+        self._ensure_secret_placeholder_state()
+        if field in self._secret_placeholder_fields:
+            return None
+        value = str(self._secret_var(field).get() or "").strip()
+        return value or None
 
     def _capture_description_buffer(self) -> None:
         if self.description_text is None:
@@ -1507,9 +1596,33 @@ class ProfileManagerApp:
             ),
         )
         current_row = 0
-        current_row = self._add_compact_entry_row(form, current_row, "API Key", self.api_key_var, self.t("field_api_key_help"), secret=True)
-        current_row = self._add_compact_entry_row(form, current_row, "Secret Key", self.api_secret_var, self.t("field_api_secret_help"), secret=True)
-        self._add_compact_entry_row(form, current_row, "Passphrase", self.api_passphrase_var, self.t("field_api_passphrase_help"), secret=True)
+        current_row = self._add_compact_entry_row(
+            form,
+            current_row,
+            "API Key",
+            self.api_key_var,
+            self.t("field_api_key_help"),
+            secret=True,
+            secret_field="api_key",
+        )
+        current_row = self._add_compact_entry_row(
+            form,
+            current_row,
+            "Secret Key",
+            self.api_secret_var,
+            self.t("field_api_secret_help"),
+            secret=True,
+            secret_field="api_secret",
+        )
+        self._add_compact_entry_row(
+            form,
+            current_row,
+            "Passphrase",
+            self.api_passphrase_var,
+            self.t("field_api_passphrase_help"),
+            secret=True,
+            secret_field="api_passphrase",
+        )
 
     def _build_workspace_vault_section(self, parent: tk.Widget, row: int, column: int) -> None:
         form = self._build_section_shell(
@@ -1546,7 +1659,16 @@ class ProfileManagerApp:
     def _add_entry(self, parent: ttk.Frame, row: int, label: str, variable: tk.StringVar, help_text: str = "", secret: bool = False) -> int:
         return self._add_entry_row(parent, row, label, variable, help_text, secret=secret)
 
-    def _add_compact_entry_row(self, parent: tk.Frame, row: int, label: str, variable: tk.StringVar, help_text: str = "", secret: bool = False) -> int:
+    def _add_compact_entry_row(
+        self,
+        parent: tk.Frame,
+        row: int,
+        label: str,
+        variable: tk.StringVar,
+        help_text: str = "",
+        secret: bool = False,
+        secret_field: Optional[str] = None,
+    ) -> int:
         bg = parent.cget("bg")
         metrics = self._layout_metrics
         self._grid_label_with_help(
@@ -1559,6 +1681,8 @@ class ProfileManagerApp:
             pady=(0, 4),
         )
         entry = self._create_entry(parent, variable, secret=secret)
+        if secret_field is not None:
+            self._register_secret_entry(secret_field, entry)
         entry.grid(row=row, column=1, sticky=tk.EW, pady=(0, int(metrics["section_gap"])), ipady=int(metrics["entry_ipady"]))
         return row + 1
 
@@ -1681,7 +1805,7 @@ class ProfileManagerApp:
             )
         )
 
-    def _update_profile_credential_status(self, profile_id: str, api_key_hint: str) -> None:
+    def _update_profile_credential_status(self, profile_id: str, api_key_hint: str) -> bool:
         try:
             has_credentials = profile_has_credentials_by_id(profile_id)
         except ProfileError as exc:
@@ -1694,13 +1818,14 @@ class ProfileManagerApp:
                 text = self.t("credential_status_missing")
             self.credential_status_var.set(text)
             self._set_credential_badge("warning", text)
-            return
+            return False
         if has_credentials:
             self.credential_status_var.set(self.t("credential_status_saved", hint=api_key_hint).strip())
             self._set_credential_badge("success", self.credential_status_var.get())
-            return
+            return True
         self.credential_status_var.set(self.t("credential_status_missing"))
         self._set_credential_badge("warning", self.credential_status_var.get())
+        return False
 
     def _refresh_agent_cache(self, command: str) -> None:
         try:
@@ -1862,9 +1987,7 @@ class ProfileManagerApp:
         self.name_var.set("")
         self.contract_base_url_var.set("")
         self.spot_base_url_var.set("")
-        self.api_key_var.set("")
-        self.api_secret_var.set("")
-        self.api_passphrase_var.set("")
+        self._clear_secret_placeholders()
         self.default_var.set(False)
         self.credential_status_var.set(self.t("credential_status_unsaved"))
         self.description_buffer = ""
@@ -1896,13 +2019,13 @@ class ProfileManagerApp:
         if self.description_text is not None:
             self.description_text.delete("1.0", tk.END)
             self.description_text.insert("1.0", profile.description)
-        self.api_key_var.set("")
-        self.api_secret_var.set("")
-        self.api_passphrase_var.set("")
         self.default_var.set(get_default_profile_id() == profile.profile_id)
         self.editor_context_var.set(self.local_text(f"Editing: {profile.name}", f"当前编辑：{profile.name}"))
         self._set_mode_badge(editing=True)
-        self._update_profile_credential_status(profile.profile_id, profile.api_key_hint)
+        if self._update_profile_credential_status(profile.profile_id, profile.api_key_hint):
+            self._show_saved_secret_placeholders(profile.api_key_hint)
+        else:
+            self._clear_secret_placeholders()
 
     def save_profile(self) -> None:
         if not self.profile_actions_enabled:
@@ -1919,9 +2042,9 @@ class ProfileManagerApp:
         description = self.description_text.get("1.0", tk.END).strip()
         contract_base_url = self.contract_base_url_var.get().strip()
         spot_base_url = self.spot_base_url_var.get().strip()
-        api_key = self.api_key_var.get().strip() or None
-        api_secret = self.api_secret_var.get().strip() or None
-        api_passphrase = self.api_passphrase_var.get().strip() or None
+        api_key = self._secret_value_for_save("api_key")
+        api_secret = self._secret_value_for_save("api_secret")
+        api_passphrase = self._secret_value_for_save("api_passphrase")
 
         try:
             contract_base_url = self._validate_optional_base_url(
@@ -1964,9 +2087,7 @@ class ProfileManagerApp:
         self.current_profile_id = profile.profile_id
         self.editor_context_var.set(self.local_text(f"Editing: {profile.name}", f"当前编辑：{profile.name}"))
         self._set_mode_badge(editing=True)
-        self.api_key_var.set("")
-        self.api_secret_var.set("")
-        self.api_passphrase_var.set("")
+        self._show_saved_secret_placeholders(profile.api_key_hint)
         self._update_profile_credential_status(profile.profile_id, profile.api_key_hint)
         self._refresh_agent_cache("profile-manager.ui.save")
 
@@ -2050,6 +2171,9 @@ class ProfileManagerApp:
         self.account_lock_reset_button = None
         self.mode_badge = None
         self.credential_badge = None
+        self.api_key_entry = None
+        self.api_secret_entry = None
+        self.api_passphrase_entry = None
         self._hide_help_bubble()
 
         self._build_hero()

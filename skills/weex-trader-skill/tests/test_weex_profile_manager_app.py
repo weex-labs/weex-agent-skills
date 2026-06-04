@@ -52,6 +52,22 @@ class FakeTextValue:
         return self.value
 
 
+class FakeEditableText(FakeTextValue):
+    def delete(self, *_args: object, **_kwargs: object) -> None:
+        self.value = ""
+
+    def insert(self, _index: object, value: str) -> None:
+        self.value = value
+
+
+class FakeListboxSelection:
+    def __init__(self, selection: tuple[int, ...]) -> None:
+        self.selection = selection
+
+    def curselection(self) -> tuple[int, ...]:
+        return self.selection
+
+
 class ProfileManagerLayoutTests(unittest.TestCase):
     def test_main_bootstraps_agent_state_before_launching_ui(self) -> None:
         fake_root = types.SimpleNamespace(mainloop=mock.Mock())
@@ -591,6 +607,68 @@ class ProfileManagerLayoutTests(unittest.TestCase):
         self.assertEqual(profile_app.api_key_var.get(), "key-1234")
         self.assertEqual(profile_app.api_secret_var.get(), "secret-1234")
         self.assertEqual(profile_app.api_passphrase_var.get(), "pass-1234")
+
+    def test_existing_profile_secret_placeholders_are_not_saved_as_credentials(self) -> None:
+        profile_app = app.ProfileManagerApp.__new__(app.ProfileManagerApp)
+        profile_app.profile_actions_enabled = True
+        profile_app.root = object()
+        profile_app.language = "en"
+        profile_app.texts = app.TEXTS["en"]
+        profile_app.profile_listbox = FakeListboxSelection((0,))
+        profile_app.profile_rows = {0: "profile-main"}
+        profile_app.current_profile_id = None
+        profile_app.name_var = FakeVar("")
+        profile_app.description_text = FakeEditableText("")
+        profile_app.contract_base_url_var = FakeVar("")
+        profile_app.spot_base_url_var = FakeVar("")
+        profile_app.api_key_var = FakeVar("")
+        profile_app.api_secret_var = FakeVar("")
+        profile_app.api_passphrase_var = FakeVar("")
+        profile_app.default_var = FakeVar(False)
+        profile_app.editor_context_var = FakeVar("")
+        profile_app.credential_status_var = FakeVar("")
+        profile_app.t = app.ProfileManagerApp.t.__get__(profile_app, app.ProfileManagerApp)
+        profile_app.local_text = app.ProfileManagerApp.local_text.__get__(profile_app, app.ProfileManagerApp)
+        profile_app._set_mode_badge = mock.Mock()
+        profile_app._set_credential_badge = mock.Mock()
+        profile_app.refresh_profiles = mock.Mock()
+        profile_app._refresh_agent_cache = mock.Mock()
+
+        profile = types.SimpleNamespace(
+            profile_id="profile-main",
+            name="main",
+            description="Main account",
+            contract_base_url="",
+            spot_base_url="",
+            api_key_hint="***2f4f",
+        )
+
+        fake_messagebox = types.SimpleNamespace(
+            showwarning=mock.Mock(),
+            showerror=mock.Mock(),
+            showinfo=mock.Mock(),
+        )
+
+        with mock.patch.object(app, "tk", types.SimpleNamespace(END="end")):
+            with mock.patch.object(app, "get_profile_by_id", return_value=profile):
+                with mock.patch.object(app, "get_default_profile_id", return_value=None):
+                    with mock.patch.object(app, "profile_has_credentials_by_id", return_value=True):
+                        with mock.patch.object(app, "messagebox", fake_messagebox):
+                            profile_app.on_select_profile(object())
+
+                            self.assertEqual(profile_app.api_key_var.get(), "Saved (***2f4f, leave blank to keep)")
+                            self.assertEqual(profile_app.api_secret_var.get(), "Saved (leave blank to keep)")
+                            self.assertEqual(profile_app.api_passphrase_var.get(), "Saved (leave blank to keep)")
+
+                            with mock.patch.object(app, "upsert_profile", return_value=profile) as upsert_mock:
+                                with mock.patch.object(app, "set_default_profile") as set_default_mock:
+                                    profile_app.save_profile()
+
+        upsert_kwargs = upsert_mock.call_args.kwargs
+        self.assertIsNone(upsert_kwargs["api_key"])
+        self.assertIsNone(upsert_kwargs["api_secret"])
+        self.assertIsNone(upsert_kwargs["api_passphrase"])
+        set_default_mock.assert_not_called()
 
     def test_delete_profile_refreshes_agent_cache_after_success(self) -> None:
         profile_app = app.ProfileManagerApp.__new__(app.ProfileManagerApp)

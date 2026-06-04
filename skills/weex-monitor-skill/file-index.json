@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "purpose": "File-level guide for the WEEX monitor skill.",
+  "file_guide": {
+    "scripts/weex_monitor_cli.py": {
+      "role": "Primary deterministic monitor CLI for PnL task normalization, monitor confirmation text/token binding, live position confirmation, multi-runtime agent status reporting metadata, SQLite local persistence, append-only events, confirmed-task lookup, live position revalidation, PnL trigger evaluation, dry-run checks, live loop execution, delegated live PnL close execution, failure review state, and execution claim locking.",
+      "when": [
+        "creating or previewing a monitor DSL",
+        "rendering confirmation text and a confirmation token before activation",
+        "rendering live-position confirmation text before combined create-and-start activation",
+        "saving an active monitor task after explicit monitor confirmation and matching confirmation token",
+        "evaluating a PnL monitor from normalized position snapshots",
+        "listing or cancelling local monitor tasks",
+        "reviewing local monitor events",
+        "running a dry-run trigger pass against mock positions",
+        "running a bounded dry-run loop against mock position sequences",
+        "running a confirmed live loop for active PnL monitors",
+        "activating and running a bounded PnL live loop from one combined confirmation",
+        "building a non-mutating live delegate summary for weex-trader-skill",
+        "running a confirmed-token-validated live PnL check that delegates market close to weex-trader-skill",
+        "recording delegated live failures as review_required"
+      ],
+      "surface": [
+        "preview",
+        "confirm",
+        "confirm-text-live",
+        "evaluate-pnl",
+        "confirm-text",
+        "events",
+        "run-once",
+        "run-live-once",
+        "run-loop",
+        "confirm-and-run-loop",
+        "list",
+        "cancel"
+      ]
+    },
+    "SKILL.md": {
+      "role": "Behavioral routing, supported MVP scenarios, and safety policy for the monitor skill."
+    },
+    "manifest.json": {
+      "role": "Machine-readable routing and execution-boundary metadata."
+    },
+    "file-index.json": {
+      "role": "This navigation guide; keep it updated when the skill surface, docs, tests, or scripts change."
+    },
+    "tests/test_weex_monitor_cli.py": {
+      "role": "Behavioral tests for monitor task normalization, confirmation token binding, dry-run and live loop execution, live delegation, failure recording, execution claim locking, and CLI subprocess flows."
+    },
+    "tests/test_docs_consistency.py": {
+      "role": "Documentation and package consistency tests for frontmatter, manifest identity, safety-boundary text, AI natural-language DSL rules, file-index coverage, and prohibited trader internal imports."
+    }
+  }
+}

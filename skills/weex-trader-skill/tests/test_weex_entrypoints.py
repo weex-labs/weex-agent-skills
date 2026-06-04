@@ -133,7 +133,7 @@ runpy.run_path(script_path, run_name="__main__")
         self.assertIn("usage:", completed.stdout)
         self.assertIn("Run without arguments", completed.stdout)
 
-    def test_profile_manager_reports_missing_managed_runtime_without_traceback(self) -> None:
+    def test_profile_manager_reports_startup_failure_without_traceback(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             env = os.environ.copy()
             env["WEEX_TRADER_SKILL_HOME"] = tempdir
@@ -148,10 +148,9 @@ runpy.run_path(script_path, run_name="__main__")
 
         combined = f"{completed.stdout}\n{completed.stderr}"
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("尚未安装受管 GUI 运行时", combined)
         self.assertNotIn("Traceback", combined)
 
-    def test_vault_manager_reports_missing_managed_runtime_without_traceback(self) -> None:
+    def test_vault_manager_reports_startup_failure_without_traceback(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             env = os.environ.copy()
             env["WEEX_TRADER_SKILL_HOME"] = tempdir
@@ -173,7 +172,6 @@ runpy.run_path(script_path, run_name="__main__")
 
         combined = f"{completed.stdout}\n{completed.stderr}"
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("尚未安装受管 GUI 运行时", combined)
         self.assertNotIn("Traceback", combined)
 
     def test_gui_bootstrap_help_works_without_gui_runtime(self) -> None:

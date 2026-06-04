@@ -13,7 +13,22 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 NOISE_DIR_NAMES = {"__pycache__", ".pytest_cache", ".git"}
 NOISE_FILE_NAMES = {".DS_Store"}
 NOISE_FILE_SUFFIXES = {".pyc"}
-DEFAULT_SKILLS = ("weex-trader-skill", "weex-analysis-skill")
+DEFAULT_SKILLS = ("weex-trader-skill", "weex-analysis-skill", "weex-monitor-skill")
+SKILL_DEPENDENCIES = {
+    "weex-monitor-skill": ("weex-trader-skill",),
+}
+SUPPORTED_AGENTS = {
+    "github-copilot",
+    "claude-code",
+    "cursor",
+    "codex",
+    "gemini",
+    "antigravity",
+}
+AGENT_HINTS = {
+    "claude": "Use --agent claude-code for Claude Code.",
+    "openclaw": "Openclaw is not supported by gh skill install --agent; use --dir for an Openclaw skills directory if that host expects one.",
+}
 ROOT_METADATA_FILES = (
     Path("README.md"),
     Path("LICENSE"),
@@ -32,7 +47,12 @@ def resolve_skills(args: argparse.Namespace) -> tuple[str, ...]:
     if args.all:
         return discover_skills()
     if args.skill:
-        return tuple(args.skill)
+        selected = list(args.skill)
+        for skill in list(selected):
+            for dependency in SKILL_DEPENDENCIES.get(skill, ()):
+                if dependency not in selected:
+                    selected.insert(0, dependency)
+        return tuple(dict.fromkeys(selected))
     return DEFAULT_SKILLS
 
 
@@ -44,6 +64,16 @@ def validate_skills(root: Path, skills: tuple[str, ...]) -> None:
             missing.append(skill)
     if missing:
         raise SystemExit(f"Unknown or invalid skill(s): {', '.join(missing)}")
+
+
+def validate_agent(agent: str | None) -> None:
+    if agent is None:
+        return
+    if agent in SUPPORTED_AGENTS:
+        return
+    hint = AGENT_HINTS.get(agent)
+    suffix = f" {hint}" if hint else f" Supported agents: {', '.join(sorted(SUPPORTED_AGENTS))}."
+    raise SystemExit(f"Unsupported agent: {agent}.{suffix}")
 
 
 def git_path_list(root: Path, *args: str) -> list[Path]:
@@ -158,6 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    validate_agent(args.agent)
     skills = resolve_skills(args)
 
     with tempfile.TemporaryDirectory(prefix="weex-local-skills-") as tempdir:

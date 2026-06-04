@@ -313,12 +313,25 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIn("actions/setup-python@v6", workflow_text)
         self.assertIn("GH_CLI_VERSION", workflow_text)
         self.assertIn("Install GitHub CLI with skill support", workflow_text)
+        self.assertIn("--allow-downgrades", workflow_text)
         self.assertIn("gh skill --help", workflow_text)
         self.assertIn("python3 -m pip install --require-hashes -r skills/weex-trader-skill/requirements.lock", workflow_text)
         self.assertIn("tools/run_skill_tests.py", workflow_text)
         self.assertIn("tools/clean_local_skill_checkout.py --check", workflow_text)
         self.assertIn("tools/install_local_skills.py", workflow_text)
+        self.assertIn("--skill weex-monitor-skill", workflow_text)
         self.assertIn("gh skill publish --dry-run", workflow_text)
+
+    def test_root_readme_describes_three_skills_including_monitor(self) -> None:
+        readme_text = REPO_README.read_text(encoding="utf-8")
+        zh_readme_text = (REPO_ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+
+        self.assertIn("The Three Skills", readme_text)
+        self.assertIn("weex-monitor-skill", readme_text)
+        self.assertIn("automated monitor", readme_text.lower())
+        self.assertIn("三个 Skill", zh_readme_text)
+        self.assertIn("weex-monitor-skill", zh_readme_text)
+        self.assertIn("自动化监控", zh_readme_text)
 
     def test_machine_readable_metadata_describes_application_vault_consistently(self) -> None:
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))

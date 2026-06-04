@@ -699,6 +699,7 @@ def _normalize_positions(payload: Any, market: str) -> list[dict[str, Any]]:
             ),
             "quantity": _to_float(_pick(row, "size", "quantity", "qty")),
             "notional": _to_float(_pick(row, "openValue", "value", "notional")),
+            "unrealized_pnl": _to_float(_pick(row, "unrealizePnl", "unrealizedPnl", "unrealized_pnl")),
             "leverage": _to_float(_pick(row, "leverage")),
             "created_time": int(_pick(row, "createdTime", "time") or 0),
             "updated_time": int(_pick(row, "updatedTime", "updateTime") or 0),
@@ -718,7 +719,9 @@ def _normalize_orders(payload: Any, market: str) -> list[dict[str, Any]]:
             "symbol": str(_pick(row, "symbol") or "UNKNOWN"),
             "order_id": _normalize_order_identifier(row),
             "algo_id": str(_pick(row, "algoId") or ""),
-            "client_order_id": str(_pick(row, "client_order_id", "clientOrderId", "origClientOrderId") or ""),
+            "client_order_id": str(
+                _pick(row, "client_order_id", "clientOrderId", "clientAlgoId", "origClientOrderId") or ""
+            ),
             "side": str(_pick(row, "side") or "unknown").lower(),
             "position_side": str(_pick(row, "position_side", "positionSide") or "").lower() or None,
             "margin_type": _normalize_margin_type(_pick(row, "marginType", "margin_type")),

@@ -1,9 +1,10 @@
 ---
-name: weex-analysis-skill
-description: Use when the user wants read-only WEEX snapshot, fill, replay, profile, order-risk, or account-risk analysis from normalized JSON payloads.
 compatibility: Requires Python for the bundled JSON analysis scripts; network access is optional and only needed when paired with trader-skill live collection workflows.
+description: Use when the user wants read-only WEEX snapshot, fill, replay, profile, order-risk, or account-risk analysis from normalized JSON payloads.
+metadata:
+    local-path: /var/folders/25/vzbzcnfx6jx58c7c00nckb8r0000gn/T/weex-local-skills-qhr5kqcc/repo/skills/weex-analysis-skill
+name: weex-analysis-skill
 ---
-
 # WEEX Analysis Skill
 
 Read `manifest.json` for routing rules. Open `file-index.json` only when you need file-level guidance.

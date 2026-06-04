@@ -219,6 +219,28 @@ class ReplayCollectionTests(unittest.TestCase):
         self.assertFalse(normalized["reduce_only"])
         self.assertFalse(normalized["close_position"])
 
+    def test_normalize_conditional_order_preserves_client_algo_id(self) -> None:
+        normalized = aggregator._normalize_orders(
+            [
+                {
+                    "algoId": 91,
+                    "actualOrderId": 0,
+                    "clientAlgoId": "mon_price_demo",
+                    "symbol": "BTCUSDT",
+                    "orderType": "TAKE_PROFIT_MARKET",
+                    "side": "SELL",
+                    "positionSide": "LONG",
+                    "algoStatus": "NOT_TRIGGER",
+                    "quantity": "0.01",
+                    "tpTriggerPrice": "70000",
+                    "createTime": 1710001000000,
+                }
+            ],
+            "futures",
+        )[0]
+
+        self.assertEqual(normalized["client_order_id"], "mon_price_demo")
+
     def test_normalize_order_parses_string_false_boolean_fields(self) -> None:
         normalized = aggregator._normalize_orders(
             [
@@ -981,6 +1003,7 @@ class ReplayCollectionTests(unittest.TestCase):
                 "size": "0.01",
                 "openValue": "300",
                 "leverage": "5",
+                "unrealizePnl": "51.2",
             },
             {
                 "symbol": "ETHUSDT",
@@ -1007,6 +1030,7 @@ class ReplayCollectionTests(unittest.TestCase):
 
         self.assertIsNone(result["symbol"])
         self.assertEqual(result["market_snapshot"]["current_price"], 3150.0)
+        self.assertEqual(result["positions"][0]["unrealized_pnl"], 51.2)
         fetcher.fetch_futures_latest_price.assert_called_once_with(symbol="ETHUSDT")
 
     def test_collect_account_risk_payload_estimates_price_from_position_when_market_lookup_fails(self) -> None:

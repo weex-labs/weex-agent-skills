@@ -4,9 +4,9 @@
 
 本仓库目前支持 Codex、Openclaw、Claude Code 使用 WEEX Skills。
 
-安装这些 skill 以后，你可以让 AI 工具查询 WEEX 市场数据、查看账户状态、采集交易历史、预览订单风险，或分析 WEEX 交易记录。普通使用不需要你直接运行 Python 脚本，从聊天里点名 skill 开始即可。
+安装这些 skill 以后，你可以让 AI 工具查询 WEEX 市场数据、查看账户状态、采集交易历史、预览订单风险、创建自动化监控，或分析 WEEX 交易记录。普通使用不需要你直接运行 Python 脚本，从聊天里点名 skill 开始即可。
 
-你可以把 skill 理解成 AI 工具的“能力包”。在聊天里提到 `$weex-trader-skill` 或 `$weex-analysis-skill`，就是在告诉 AI 使用哪一套 WEEX 能力。
+你可以把 skill 理解成 AI 工具的“能力包”。在聊天里提到 `$weex-trader-skill`、`$weex-analysis-skill` 或 `$weex-monitor-skill`，就是在告诉 AI 使用哪一套 WEEX 能力。
 
 ## 从这里开始
 
@@ -32,7 +32,7 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 
 4. 如果你是第一次使用，建议先从只读任务开始，比如查询行情、查看账户、采集交易历史复盘数据（replay），或分析风险，再尝试任何实时下单。
 
-## 两个 Skill 分别做什么？
+## 三个 Skill 分别做什么？
 
 ### `weex-trader-skill`
 
@@ -81,6 +81,26 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 | 生成画像 | `使用 $weex-analysis-skill 根据这份 replay 数据生成交易画像。` |
 | 审查账户风险 | `使用 $weex-analysis-skill 分析这个账户风险 JSON，并总结主要风险。` |
 
+### `weex-monitor-skill`
+
+当 AI 工具需要把自然语言 WEEX 监控指令整理成已确认的本地监控任务时，使用 [`weex-monitor-skill`](skills/weex-monitor-skill/SKILL.md)。
+
+这个 skill 是本地仓位收益监控编排层。它负责起草、确认、存储、评估、通过 `weex-trader-skill` 执行并回报收益监控任务，但不保存 API 凭证、不解锁 vault、不签名、不直接提交 REST。收益触发后的市价平仓仍需要用户明确授权使用真实账户并提交真实平仓委托。价格条件平仓请改用 WEEX 官方条件单，并通过 `weex-trader-skill` 处理，不再由 `weex-monitor-skill` 创建本地价格监控。
+
+适合：
+
+- 按未实现盈亏监控单个合约仓位
+- 当收益阈值触发且用户授权真实账户执行时，通过 `weex-trader-skill` 执行方向级市价平仓
+- 使用本地仓位快照做 dry-run 监控演练
+- 查看、审计和取消本地监控任务
+
+示例提示词：
+
+| 场景 | 提示词 |
+|---|---|
+| 收益监控 | `使用 $weex-monitor-skill 监控 BTCUSDT 多单，先核对真实持仓，未实现盈利大于 50 USDT 时在我授权后市价平多。` |
+| 查看监控 | `使用 $weex-monitor-skill 列出我的本地监控任务和最近事件。` |
+
 ## 我应该用哪个 Skill？
 
 | 你想做什么 | 使用 |
@@ -89,6 +109,8 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 | 查询实时私有账户、余额、订单或仓位数据 | `weex-trader-skill` |
 | 设置或使用已保存的 WEEX API profile | `weex-trader-skill` |
 | 预览、下单、撤单或检查实时订单 | `weex-trader-skill` |
+| 创建或查看收益条件的本地自动化监控 | `weex-monitor-skill` |
+| 创建交易所原生价格条件平仓 | `weex-trader-skill` |
 | 分析已有的 WEEX JSON 文件或粘贴的 JSON 数据 | `weex-analysis-skill` |
 | 分析实时账户历史 | 先用 `weex-trader-skill` 采集数据，再用 `weex-analysis-skill` 分析 |
 
@@ -99,6 +121,10 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 ```bash
 python3 tools/install_local_skills.py --all --agent codex
 ```
+
+Claude Code 请使用 `--agent claude-code`。本地安装工具会校验 `gh skill install` 当前支持的 agent；如果你的宿主不在支持列表里，请用 `--dir` 安装到该宿主期望的 skills 目录。
+
+`weex-monitor-skill` 的实时账户读取和实时执行委托依赖 `weex-trader-skill`。从本地安装器单独安装 `weex-monitor-skill` 时会自动带上 `weex-trader-skill`；普通使用仍建议安装全部 skills。
 
 大多数用户只需要使用 [从这里开始](#从这里开始) 中的 GitHub 安装命令。
 
@@ -115,5 +141,6 @@ python3 tools/install_local_skills.py --all --agent codex
 
 - [`weex-trader-skill` README](skills/weex-trader-skill/README.md)：实时 WEEX 访问、API profile、订单预览、实时订单流程和故障排查。
 - [`weex-analysis-skill` README](skills/weex-analysis-skill/README.md)：输入数据要求、分析示例、replay 复盘和安全说明。
+- [`weex-monitor-skill` SKILL.md](skills/weex-monitor-skill/SKILL.md)：自动化监控 DSL、确认流程、dry-run runner 和 live 执行边界。
 - [`weex-trader-skill` script operations](skills/weex-trader-skill/references/script-operations.md)：面向进阶用户的直接脚本用法。
 - [`weex-analysis-skill` analysis playbook](skills/weex-analysis-skill/references/analysis-playbook.md)：分析行为和结果解读细节。

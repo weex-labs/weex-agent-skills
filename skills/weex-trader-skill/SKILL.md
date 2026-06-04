@@ -1,9 +1,10 @@
 ---
-name: weex-trader-skill
-description: Use when the user wants WEEX REST automation for contract or spot trading, market or account queries, or secure saved-profile setup and management.
 compatibility: Requires Python with requirements.lock installed, network access for WEEX REST calls, and Tk through an explicitly prepared managed GUI runtime for Windows/macOS GUI profile and vault flows.
+description: Use when the user wants WEEX REST automation for contract or spot trading, market or account queries, or secure saved-profile setup and management.
+metadata:
+    local-path: /var/folders/25/vzbzcnfx6jx58c7c00nckb8r0000gn/T/weex-local-skills-qhr5kqcc/repo/skills/weex-trader-skill
+name: weex-trader-skill
 ---
-
 # WEEX Trader Skill
 
 Read `manifest.json` for routing rules. Open `file-index.json` only for file-level guidance.
@@ -16,7 +17,7 @@ On Windows and macOS, GUI profile and vault flows must use the managed GUI runti
 - `scripts/weex_contract_api.py`: contract/futures REST
 - `scripts/weex_spot_api.py`: spot REST
 - `scripts/weex_trade_data_aggregator.py`: normalize live/history into replay, profile, order-risk, and account-risk payloads
-- `scripts/weex_trade_guard.py`: preview order risk, scan account risk, persist pending intents, and require explicit confirmation before live orders
+- `scripts/weex_trade_guard.py`: preview order risk, preview TP/SL conditional order risk, scan account risk, persist pending intents, and require explicit confirmation before live orders
 - `scripts/weex_trade_risk_review.py`: local risk review helpers for standalone trade-guard preview/account-scan flows
 - `scripts/weex_order_intent_state.py`: store and validate pending order intents
 - `scripts/weex_gui_launcher.py`: detached launcher for GUI profile/vault entrypoints on macOS and Windows; vault launches accept `--requested-action setup|unlock|status|lock`
@@ -39,7 +40,7 @@ These auto-detect language from `agent-init.json`.
 - Contract/futures tasks: use `scripts/weex_contract_api.py`
 - Spot tasks: use `scripts/weex_spot_api.py`
 - Replay, profile, or order-risk inputs for the analysis skill: collect live data with `scripts/weex_trade_data_aggregator.py`, then pass the normalized JSON into `weex-analysis-skill`
-- Order preview, account-risk scan, and confirmation flows: use `scripts/weex_trade_guard.py`
+- Order preview, TP/SL preview, account-risk scan, and confirmation flows: use `scripts/weex_trade_guard.py`
 - Windows/macOS setup or editing: prefer the visual profile manager
 - Linux interactive setup: prefer the Linux wizard
 - Open `README.md` for the broad usage/install summary
@@ -124,7 +125,7 @@ For exact setup, lock/unlock, and password-change commands, open `references/lin
 
 - Never send mutating requests without `--confirm-live`
 - Every natural-language order preview flow must return structured risk output before the order can be confirmed
-- For natural-language confirmations, show only the localized `user_confirmation.reply_text` to the user and keep `intent_id` plus `risk_signature` internal to the execution step
+- For natural-language confirmations, show only `user_confirmation.reply_text` to the user and keep `intent_id` plus `risk_signature` internal to the execution step. The reply text is intentionally simple and localized — a single word such as `confirm` for English.
 - Pending order intents expire after a short TTL and must be regenerated when they are stale
 - Confirmation must bind to the latest preview via `intent_id` and `risk_signature`; do not reuse old confirmation tokens
 - Default flow is direct live execution; there is no mandatory dry-run phase

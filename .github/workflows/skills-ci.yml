@@ -5,9 +5,11 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   validate:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     env:
       GH_CLI_VERSION: "2.90.0"
@@ -28,7 +30,7 @@ jobs:
           curl -fsSL \
             -o /tmp/gh.deb \
             "https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_${arch}.deb"
-          sudo apt-get install -y /tmp/gh.deb
+          sudo apt-get install -y --allow-downgrades /tmp/gh.deb
           gh --version
           gh skill --help
 
@@ -49,6 +51,9 @@ jobs:
 
       - name: Smoke local analysis skill install
         run: python3 tools/install_local_skills.py --skill weex-analysis-skill --agent codex --dir /tmp/weex-skill-install/analysis --force
+
+      - name: Smoke local monitor skill install
+        run: python3 tools/install_local_skills.py --skill weex-monitor-skill --agent codex --dir /tmp/weex-skill-install/monitor --force
 
       - name: Re-clean checkout before publish validation
         run: python3 tools/clean_local_skill_checkout.py

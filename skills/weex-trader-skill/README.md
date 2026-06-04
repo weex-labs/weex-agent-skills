@@ -123,7 +123,7 @@ Use this safety order for live trading tasks:
 - run `skill.preflight` first so profile, runtime, env, and GUI-routing facts are fresh before private actions
 - use a saved profile for private REST access instead of pasting credentials into ad hoc commands
 - preview the order risk first and review the returned alerts plus `user_confirmation`
-- in natural-language flows, ask the user to reply with exactly `user_confirmation.reply_text`; do not ask them to copy `intent_id`, `risk_signature`, or longer phrases such as "confirm order"
+- in natural-language flows, ask the user to reply with exactly `user_confirmation.reply_text`; this value is intentionally simple and localized — a single word in the user's language, such as `confirm` for English. Do not ask them to copy `intent_id`, `risk_signature`, or longer phrases such as "confirm order"
 - keep `intent_id` and `risk_signature` internal for the execution step
 - confirm only with the latest preview output plus `--confirm-live`; stale or mismatched confirmation tokens must be regenerated
 - use account-risk scan when the user wants current exposure review without an order payload
@@ -155,7 +155,7 @@ If an AI or automation host launches the GUI, prefer `scripts/weex_gui_launcher.
 - `profiles.meta.json` is not the encrypted vault. It can still reveal account names, descriptions, default-profile choices, and custom base URLs.
 - `manual_once` is the supported Linux vault mode. Lock it again after sensitive work when appropriate.
 - `--confirm-live` sends real order or cancel requests to the real account. Start with least-privilege keys and a small or non-critical account whenever possible.
-- `preview-order` returns a localized `user_confirmation.reply_text` for the human reply and still returns `intent_id` plus `risk_signature` for internal execution binding.
+- `preview-order` returns localized `user_confirmation.reply_text` for the human reply, while `intent_id` plus `risk_signature` remain internal execution-binding values.
 - `confirm-order` expects the `intent_id` and `risk_signature` returned by `preview-order`; if either is missing or mismatched, regenerate the preview instead of forcing the old confirmation through.
 
 ## Troubleshooting

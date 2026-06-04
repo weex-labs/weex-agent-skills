@@ -264,13 +264,14 @@
       ]
     },
     "scripts/weex_trade_guard.py": {
-      "role": "Trade guard that previews order risk, scans current account risk, stores intents, and gates live order submission.",
+      "role": "Trade guard that previews order risk, previews TP/SL conditional order risk, scans current account risk, stores intents, and gates live order submission.",
       "when": [
         "previewing a futures or spot order before submission",
+        "previewing a futures TP/SL conditional order before submission",
         "emitting localized user confirmation reply text for natural-language flows",
         "reviewing current account-level risk without order parameters",
         "requiring explicit confirmation plus --confirm-live before a real order is sent",
-        "submitting a previously previewed pending order intent"
+        "submitting a previously previewed pending order or TP/SL intent"
       ],
       "depends_on": [
         "scripts/weex_trade_data_aggregator.py",
@@ -279,11 +280,15 @@
       ],
       "surface": [
         "preview-order",
+        "preview-tp-sl",
         "account-scan",
         "confirm-order",
+        "confirm-tp-sl",
         "cmd_preview_order",
+        "cmd_preview_tp_sl",
         "cmd_account_scan",
-        "cmd_confirm_order"
+        "cmd_confirm_order",
+        "cmd_confirm_tp_sl"
       ]
     },
     "scripts/weex_profiles_cli.py": {

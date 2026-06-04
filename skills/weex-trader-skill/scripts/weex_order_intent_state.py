@@ -47,11 +47,14 @@ def build_intent(
     analysis_output: dict[str, Any],
     now_ms: int | None = None,
     ttl_seconds: int = 300,
+    intent_type: str = "order",
+    tp_sl_order: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     current_ms = now_ms if now_ms is not None else int(time.time() * 1000)
     expires_at = current_ms + (ttl_seconds * 1000)
-    return {
+    payload = {
         "intent_id": uuid.uuid4().hex,
+        "intent_type": intent_type,
         "profile_name": profile_name,
         "market": market,
         "created_at": current_ms,
@@ -62,6 +65,9 @@ def build_intent(
         "analysis_output": analysis_output,
         "risk_signature": build_risk_signature(order_preview, analysis_output),
     }
+    if tp_sl_order is not None:
+        payload["tp_sl_order"] = tp_sl_order
+    return payload
 
 
 def save_intent(payload: dict[str, Any]) -> None:

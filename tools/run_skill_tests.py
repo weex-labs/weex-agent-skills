@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIRS = (
     ROOT / "skills" / "weex-trader-skill",
     ROOT / "skills" / "weex-analysis-skill",
+    ROOT / "skills" / "weex-monitor-skill",
 )
 
 

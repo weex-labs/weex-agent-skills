@@ -1,0 +1,87 @@
+{
+  "schema_version": 3,
+  "identity": {
+    "name": "weex-monitor-skill",
+    "source_of_truth": "SKILL.md",
+    "purpose": "WEEX automated monitor orchestration for position PnL monitoring with delegated live close."
+  },
+  "path_policy": {
+    "skill_root": ".",
+    "resolve_relative_paths_from": "skill root",
+    "portable_paths_only": true
+  },
+  "read_order": {
+    "default": [
+      "manifest.json",
+      "SKILL.md"
+    ],
+    "open_if_needed": {
+      "file_level_details": "file-index.json",
+      "monitor_cli": "scripts/weex_monitor_cli.py",
+      "live_execution_boundary": "../weex-trader-skill/SKILL.md"
+    }
+  },
+  "routing": {
+    "decision_axes": [
+      "task_type: position_pnl_monitor",
+      "trigger_source: local PnL evaluation or bounded live loop",
+      "execution_boundary: dry-run/plan-only or live execution delegated through weex-trader-skill guard commands"
+    ],
+    "domains": {
+      "task_preview": {
+        "entrypoint": "scripts/weex_monitor_cli.py",
+        "commands": [
+          "preview",
+          "confirm-text",
+          "confirm-text-live"
+        ],
+        "mutating": "confirm-text writes local draft confirmation state only; confirm-text-live first collects a matching live position through weex-trader-skill and then writes local draft confirmation state"
+      },
+      "task_confirmation": {
+        "entrypoint": "scripts/weex_monitor_cli.py",
+        "commands": [
+          "confirm"
+        ],
+        "mutating": "local task state only",
+        "requires": [
+          "--confirm-monitor",
+          "--confirmation-token"
+        ]
+      },
+      "pnl_evaluation": {
+        "entrypoint": "scripts/weex_monitor_cli.py",
+        "commands": [
+          "evaluate-pnl"
+        ],
+        "mutating": false,
+        "live_execution_delegate": "weex-trader-skill"
+      },
+      "pnl_live_runner": {
+        "entrypoint": "scripts/weex_monitor_cli.py",
+        "commands": [
+          "run-live-once",
+          "run-loop --confirm-live",
+          "confirm-and-run-loop"
+        ],
+        "mutating": "delegated live market close through weex-trader-skill; confirmed-task lookup and local active-to-executing claim prevent unconfirmed or duplicate runner submission; confirm-and-run-loop consumes a live-position monitor confirmation token and starts a duration-bounded live loop from one combined user confirmation",
+        "requires": [
+          "--confirm-monitor and --confirmation-token for confirm-and-run-loop",
+          "--confirm-live",
+          "--duration-seconds for confirm-and-run-loop"
+        ],
+        "live_execution_delegate": "weex-trader-skill"
+      },
+      "local_task_management": {
+        "entrypoint": "scripts/weex_monitor_cli.py",
+        "commands": [
+          "list",
+          "events",
+          "run-once",
+          "run-loop --dry-run",
+          "cancel"
+        ],
+        "mutating": "local task state only"
+      }
+    }
+  }
+}

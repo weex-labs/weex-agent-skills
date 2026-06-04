@@ -89,6 +89,35 @@ class InstallLocalSkillsTests(unittest.TestCase):
             self.assertFalse((export_root / ".agents").exists())
             self.assertTrue((export_root / "skills" / "demo-skill" / "SKILL.md").exists())
 
+    def test_default_local_install_includes_monitor_skill(self) -> None:
+        self.assertIn("weex-trader-skill", installer.DEFAULT_SKILLS)
+        self.assertIn("weex-analysis-skill", installer.DEFAULT_SKILLS)
+        self.assertIn("weex-monitor-skill", installer.DEFAULT_SKILLS)
+
+    def test_monitor_skill_install_includes_trader_dependency(self) -> None:
+        args = installer.build_parser().parse_args(["--skill", "weex-monitor-skill"])
+
+        self.assertEqual(
+            installer.resolve_skills(args),
+            ("weex-trader-skill", "weex-monitor-skill"),
+        )
+
+    def test_invalid_agent_is_rejected_before_printing_dry_run_command(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "Unsupported agent"):
+            installer.main(["--skill", "weex-monitor-skill", "--agent", "openclaw", "--dry-run"])
+
+        with self.assertRaisesRegex(SystemExit, "claude-code"):
+            installer.main(["--skill", "weex-monitor-skill", "--agent", "claude", "--dry-run"])
+
+    def test_supported_agent_values_include_codex_and_claude_code(self) -> None:
+        args = installer.build_parser().parse_args(["--agent", "codex"])
+        self.assertEqual(args.agent, "codex")
+        installer.validate_agent(args.agent)
+
+        args = installer.build_parser().parse_args(["--agent", "claude-code"])
+        self.assertEqual(args.agent, "claude-code")
+        installer.validate_agent(args.agent)
+
 
 if __name__ == "__main__":
     unittest.main()
