@@ -39,6 +39,12 @@ SCRIPT_OPERATIONS_REFERENCE = ROOT / "references" / "script-operations.md"
 PROFILE_ONBOARDING_REFERENCE = ROOT / "references" / "profile-onboarding.md"
 LINUX_VAULT_REFERENCE = ROOT / "references" / "linux-vault.md"
 TROUBLESHOOTING_REFERENCE = ROOT / "references" / "troubleshooting.md"
+TRADE_DATA_SCHEMA_REFERENCE = ROOT / "references" / "trade-data-schema.md"
+CONTRACT_API_DEFINITIONS_REFERENCE = ROOT / "references" / "contract-api-definitions.md"
+CONTRACT_API_SCRIPT = ROOT / "scripts" / "weex_contract_api.py"
+TRADE_DATA_AGGREGATOR_SCRIPT = ROOT / "scripts" / "weex_trade_data_aggregator.py"
+TRADE_GUARD_SCRIPT = ROOT / "scripts" / "weex_trade_guard.py"
+API_DEFINITION_GENERATOR = ROOT / "scripts" / "generate_weex_api_definitions.py"
 REQUIREMENTS = ROOT / "requirements.txt"
 REQUIREMENTS_LOCK = ROOT / "requirements.lock"
 PUBLISHED_REPO_URL = "https://github.com/weex-labs/weex-trader-skill"
@@ -62,6 +68,10 @@ CJK_MARKDOWN_EXCLUDE_PREFIXES = (
     "需求资源/",
     "发版事项/",
 )
+ALLOWED_CJK_MARKDOWN_TERMS = {
+    "SKILL.md": ("模拟盘", "真实盘"),
+    "README.md": ("模拟盘", "真实盘"),
+}
 
 
 def parse_requirement_names(text: str) -> set[str]:
@@ -151,6 +161,8 @@ class RepoConsistencyTests(unittest.TestCase):
             if any(rel_path.startswith(prefix) for prefix in CJK_MARKDOWN_EXCLUDE_PREFIXES):
                 continue
             text = path.read_text(encoding="utf-8")
+            for allowed_term in ALLOWED_CJK_MARKDOWN_TERMS.get(rel_path, ()):
+                text = text.replace(allowed_term, "")
             if CJK_RE.search(text):
                 offenders.append(rel_path)
 
@@ -223,6 +235,69 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertEqual(skill_name, manifest["identity"]["name"])
         self.assertEqual(manifest["identity"]["source_of_truth"], "SKILL.md")
 
+    def test_skill_documents_localized_user_facing_trading_mode_labels(self) -> None:
+        skill_text = SKILL.read_text(encoding="utf-8")
+        readme_text = README.read_text(encoding="utf-8")
+
+        for text in (skill_text, readme_text):
+            self.assertIn("localized trading-mode labels", text)
+            self.assertIn("`模拟盘` and `真实盘`", text)
+            self.assertIn("`demo trading` and `real trading`", text)
+            self.assertIn("not environment labels", text)
+            self.assertIn("not account labels", text)
+            self.assertIn("raw `live` or `demo`", text)
+            self.assertNotIn("localized full trading-environment names", text)
+            self.assertNotIn("real trading environment versus simulated futures environment", text)
+
+    def test_skill_documents_preview_defaults_to_combined_confirmation_when_mode_is_missing(self) -> None:
+        skill_text = SKILL.read_text(encoding="utf-8")
+        readme_text = README.read_text(encoding="utf-8")
+
+        for text in (skill_text, readme_text):
+            self.assertIn("do not ask a standalone trading-mode question", text)
+            self.assertIn("most likely initial preview mode", text)
+            self.assertIn("preview-only default", text)
+            self.assertIn("confirmation block must put the mode and funds warning first", text)
+            self.assertIn("include the switch prompt", text)
+            self.assertIn("profile names or notes can only be weak preview-default signals", text)
+            self.assertIn("same saved profile can target either trading mode", text)
+
+        for text in (skill_text, readme_text):
+            self.assertNotIn("real account versus simulated account", text)
+
+    def test_environment_language_does_not_call_trading_environment_an_account(self) -> None:
+        scanned_paths = (
+            SKILL,
+            README,
+            MANIFEST,
+            TRADE_DATA_SCHEMA_REFERENCE,
+            CONTRACT_API_DEFINITIONS_REFERENCE,
+            CONTRACT_API_SCRIPT,
+            TRADE_DATA_AGGREGATOR_SCRIPT,
+            TRADE_GUARD_SCRIPT,
+            API_DEFINITION_GENERATOR,
+        )
+        forbidden_phrases = (
+            "real account versus simulated account",
+            "real account`",
+            "simulated account`",
+            "real account\"",
+            "simulated account\"",
+            "real WEEX futures account environment",
+            "WEEX simulated futures account environment",
+            "real WEEX account",
+            "WEEX simulated futures account",
+        )
+
+        offenders: list[str] = []
+        for path in scanned_paths:
+            text = path.read_text(encoding="utf-8")
+            for phrase in forbidden_phrases:
+                if phrase in text:
+                    offenders.append(f"{path.relative_to(ROOT)}: {phrase}")
+
+        self.assertEqual(offenders, [])
+
     def test_skill_frontmatter_declares_compatibility(self) -> None:
         compatibility = extract_frontmatter_field(SKILL.read_text(encoding="utf-8"), "compatibility")
 
@@ -245,6 +320,15 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIn(expected, SCRIPT_OPERATIONS_REFERENCE.read_text(encoding="utf-8"))
         self.assertIn(expected, PROFILE_ONBOARDING_REFERENCE.read_text(encoding="utf-8"))
         self.assertIn(expected, LINUX_VAULT_REFERENCE.read_text(encoding="utf-8"))
+
+    def test_script_operations_documents_raw_call_argument_order_and_post_query_guard(self) -> None:
+        text = SCRIPT_OPERATIONS_REFERENCE.read_text(encoding="utf-8")
+
+        self.assertIn("--profile is a global argument", text)
+        self.assertIn("place it before `call`", text)
+        self.assertIn("use `--endpoint <key>`", text)
+        self.assertIn("Some official query endpoints use POST", text)
+        self.assertIn("protected as mutating by the local guard", text)
 
     def test_setup_docs_avoid_shell_specific_line_continuations(self) -> None:
         offenders: list[str] = []
@@ -415,6 +499,89 @@ class RepoConsistencyTests(unittest.TestCase):
 
         self.assertEqual(invalid, [])
         self.assertIn("spot.market.get_ticker_info", spot_reference_text)
+
+    def test_contract_definitions_include_futures_demo_endpoints(self) -> None:
+        definitions = json.loads((ROOT / "references" / "contract-api-definitions.json").read_text(encoding="utf-8"))
+        by_key = {definition["key"]: definition for definition in definitions["definitions"]}
+
+        expected = {
+            "sim.account.get_account_balance": ("GET", "/capi/v3/sim/balance", "USER_DATA", 5, 10),
+            "sim.transaction.place_order": ("POST", "/capi/v3/sim/order", "TRADE", 2, 5),
+            "sim.account.get_all_positions": ("GET", "/capi/v3/sim/position/allPosition", "USER_DATA", 10, 15),
+            "sim.transaction.get_order_history": ("GET", "/capi/v3/sim/order/history", "USER_DATA", 10, 10),
+        }
+
+        for key, (method, path, permission, weight_ip, weight_uid) in expected.items():
+            with self.subTest(key=key):
+                definition = by_key[key]
+                self.assertEqual(definition["category"], "sim")
+                self.assertEqual(definition["method"], method)
+                self.assertEqual(definition["path"], path)
+                self.assertTrue(definition["requires_auth"])
+                self.assertEqual(definition["permission"], permission)
+                self.assertEqual(definition["weight_ip"], weight_ip)
+                self.assertEqual(definition["weight_uid"], weight_uid)
+
+        order_params = {
+            row["name"]: row
+            for row in by_key["sim.transaction.place_order"]["request_params"]
+        }
+        self.assertEqual(order_params["newClientOrderId"]["required"], "Yes")
+        self.assertIn("TpWorkingType", order_params)
+        self.assertIn("SlWorkingType", order_params)
+
+    def test_script_operations_demo_history_example_omits_symbol_filter(self) -> None:
+        script_operations = SCRIPT_OPERATIONS_REFERENCE.read_text(encoding="utf-8")
+
+        self.assertNotRegex(
+            script_operations,
+            r"sim\.transaction\.get_order_history[^\n]*--query\s+'[^']*\"symbol\"",
+        )
+        self.assertIn(
+            "sim.transaction.get_order_history --trading-mode demo --query '{\"limit\":50}'",
+            script_operations,
+        )
+
+    def test_contract_demo_api_uses_contract_definition_catalog(self) -> None:
+        demo_reference = "references/contract-demo-api.zh-CN.md"
+        skill_text = SKILL.read_text(encoding="utf-8")
+        readme_text = README.read_text(encoding="utf-8")
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        file_index = json.loads(FILE_INDEX.read_text(encoding="utf-8"))
+        compact_reference = (ROOT / "references" / "contract-endpoints.md").read_text(encoding="utf-8")
+        definitions = json.loads((ROOT / "references" / "contract-api-definitions.json").read_text(encoding="utf-8"))
+        definitions_md = (ROOT / "references" / "contract-api-definitions.md").read_text(encoding="utf-8")
+
+        self.assertFalse((ROOT / demo_reference).exists())
+        self.assertNotIn(demo_reference, skill_text)
+        self.assertNotIn(demo_reference, readme_text)
+        self.assertNotIn(demo_reference, compact_reference)
+        self.assertNotIn(demo_reference, manifest["routing"]["domains"]["contract"]["open_first"])
+        self.assertNotIn(demo_reference, json.dumps(file_index, ensure_ascii=False))
+        self.assertNotIn(demo_reference, file_index["file_guide"]["scripts/weex_contract_api.py"]["depends_on"])
+        for definition in definitions["definitions"]:
+            if definition["key"].startswith("sim."):
+                with self.subTest(key=definition["key"]):
+                    self.assertTrue(definition["doc_url"].startswith("https://www.weex.com/api-doc/"))
+        self.assertIn("sim.transaction.place_order", definitions_md)
+        self.assertIn("Demo is not a local dry-run", definitions_md)
+
+    def test_contract_api_definition_markdown_keeps_grouped_contents(self) -> None:
+        definitions_md = (ROOT / "references" / "contract-api-definitions.md").read_text(encoding="utf-8")
+
+        for expected in (
+            "- `account.*` endpoint sections",
+            "- `market.*` endpoint sections",
+            "- `sim.*` endpoint sections",
+            "- `transaction.*` endpoint sections",
+            "Use in-page search with the exact endpoint key from the summary table",
+            "## Account Endpoint Sections",
+            "## Market Endpoint Sections",
+            "## Sim Endpoint Sections",
+            "## Transaction Endpoint Sections",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, definitions_md)
 
     def test_skill_ships_root_readme(self) -> None:
         self.assertTrue(README.exists())

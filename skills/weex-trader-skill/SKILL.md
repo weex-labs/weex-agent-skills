@@ -37,14 +37,14 @@ These auto-detect language from `agent-init.json`.
 
 ## Routing
 
-- Contract/futures tasks: use `scripts/weex_contract_api.py`
+- Contract/futures tasks: use `scripts/weex_contract_api.py`; simulated futures trading uses explicit `--trading-mode demo` and the 4 official `sim.*` endpoints documented in `references/contract-api-definitions.json`
 - Spot tasks: use `scripts/weex_spot_api.py`
 - Replay, profile, or order-risk inputs for the analysis skill: collect live data with `scripts/weex_trade_data_aggregator.py`, then pass the normalized JSON into `weex-analysis-skill`
 - Order preview, TP/SL preview, account-risk scan, and confirmation flows: use `scripts/weex_trade_guard.py`
 - Windows/macOS setup or editing: prefer the visual profile manager
 - Linux interactive setup: prefer the Linux wizard
 - Open `README.md` for the broad usage/install summary
-- Open `references/profile-manager.md`, `references/profile-onboarding.md`, `references/linux-vault.md`, `references/auth-and-signing.md`, `references/script-operations.md`, `references/trade-data-schema.md`, and `references/troubleshooting.md` as needed
+- Open `references/profile-manager.md`, `references/profile-onboarding.md`, `references/linux-vault.md`, `references/auth-and-signing.md`, `references/script-operations.md`, `references/trade-data-schema.md`, `references/contract-api-definitions.md`, and `references/troubleshooting.md` as needed
 
 ## Runtime Prerequisites
 
@@ -123,9 +123,16 @@ For exact setup, lock/unlock, and password-change commands, open `references/lin
 
 ## Safety Policy
 
-- Never send mutating requests without `--confirm-live`
+- Never send live mutating requests without `--confirm-live`; never send demo mutating requests without `--trading-mode demo --confirm-demo`
+- Demo futures orders are not local dry-runs; they are mutating requests to WEEX futures demo mode
+- Keep `live` and `demo` as internal CLI/API values only. In user-facing dialogue, risk previews, order confirmations, and account queries, use localized trading-mode labels, not environment labels and not account labels. For Chinese, use `模拟盘` and `真实盘`; for English, use `demo trading` and `real trading`. Never present raw `live` or `demo` as the trading-mode label for the user.
+- In natural-language private account queries and direct non-preview trading actions, if the user did not clearly choose `模拟盘` or `真实盘` in Chinese, or `demo trading` or `real trading` in English, ask them to choose before calling private account or order commands.
+- In natural-language order preview flows where a saved profile and order details are present but trading mode is missing, do not ask a standalone trading-mode question. Generate the preview with the most likely initial preview mode: explicit user wording wins first; profile names or notes can only be weak preview-default signals; if no useful signal exists, use `live` because the default flow is direct live execution. This is a preview-only default, and the same saved profile can target either trading mode.
+- For every natural-language summary that uses private WEEX data or mentions a private order action, start with `user_environment_prefix` when it is returned. This includes account balances, positions, account risk, order previews, submitted order results, order cancel results, TP/SL order results, open-order queries, order status queries, and order-history queries. If a private command returns `environment` but not `user_environment_prefix`, derive the first line from that environment before summarizing anything else.
+- The environment prefix must be the first user-visible line, using localized labels such as `模拟盘` or `Current trading mode: real trading`. Keep this prefix informational; it is not an order confirmation gate.
 - Every natural-language order preview flow must return structured risk output before the order can be confirmed
-- For natural-language confirmations, show only `user_confirmation.reply_text` to the user and keep `intent_id` plus `risk_signature` internal to the execution step. The reply text is intentionally simple and localized — a single word such as `confirm` for English.
+- For natural-language order preview confirmations, show the returned `user_confirmation.reply_instruction` as the user-facing confirmation block. The confirmation block must put the mode and funds warning first, then include the risk preview status, order summary, highest-priority warning, the exact confirmation reply, and include the switch prompt from `user_confirmation.switch_reply_text` when present.
+- For natural-language confirmations, the only text the user should reply with to execute is `user_confirmation.reply_text`; keep `intent_id` plus `risk_signature` internal to the execution step. The reply text is intentionally simple and localized — a single word such as `confirm` for English.
 - Pending order intents expire after a short TTL and must be regenerated when they are stale
 - Confirmation must bind to the latest preview via `intent_id` and `risk_signature`; do not reuse old confirmation tokens
 - Default flow is direct live execution; there is no mandatory dry-run phase

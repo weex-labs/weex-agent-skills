@@ -10,6 +10,7 @@ name: weex-analysis-skill
 Read `manifest.json` for routing rules. Open `file-index.json` only when you need file-level guidance.
 
 This skill is read-only. It analyzes normalized replay, profile, order-risk, snapshot, and fill JSON payloads, but it never places orders, updates profiles, or changes vault state.
+When trader-collected payloads include `trading_mode`, `environment`, or `account_scope`, preserve those fields and show the trading mode in user-facing analysis output. Use localized trading-mode labels, not environment labels and not account labels, for user-facing copy. For Chinese, use `模拟盘` and `真实盘`; for English, use `demo trading` and `real trading`. Keep raw `live` or `demo` only as preserved internal payload values.
 
 ## Core Entry Points
 
@@ -33,6 +34,7 @@ This skill is read-only. It analyzes normalized replay, profile, order-risk, sna
 
 - Prefer normalized JSON payloads over natural-language summaries
 - If the user already has live data from `weex-trader-skill`, convert it into the accepted normalized JSON shape for the target analysis command before analysis
+- Preserve and display `trading_mode`, `environment`, and `account_scope` from trader output; do not infer hidden live/demo state from profile names or symbols. If the payload lacks environment context and the user needs account-scope interpretation, ask for the source environment instead of guessing.
 - `analyze-snapshot` can also read `account_snapshot.equity` and `account_snapshot.available_balance` when the payload comes from account-risk collection
 - If a replay payload is too large to review comfortably, prepare it first with `scripts/weex_analysis_prepare.py prepare-replay`
 - If the input shape is incomplete, ask only for the missing fields that materially affect the analysis

@@ -32,11 +32,13 @@
   },
   "file_guide": {
     "scripts/weex_contract_api.py": {
-      "role": "Primary contract/futures REST CLI.",
+      "role": "Primary contract/futures REST CLI, including official simulated futures sim.* endpoint routing through explicit trading_mode.",
       "when": [
         "contract market data",
         "contract balances or positions",
+        "simulated futures balances or positions",
         "contract order actions",
+        "simulated futures order actions",
         "raw contract endpoint access"
       ],
       "depends_on": [
@@ -197,9 +199,10 @@
       ]
     },
     "scripts/weex_trade_data_aggregator.py": {
-      "role": "Normalized trade data aggregation layer for replay, profile, order-risk, and account-risk analysis inputs.",
+      "role": "Normalized trade data aggregation layer for replay, profile, order-risk, and account-risk analysis inputs with live/demo environment metadata.",
       "when": [
         "collecting futures history into a normalized replay payload",
+        "collecting simulated futures balance, positions, and historical orders into a normalized payload",
         "collecting spot symbol-specific history into a normalized replay payload",
         "building profile, order-risk, and account-risk payloads for the analysis skill"
       ],
@@ -218,7 +221,7 @@
       ]
     },
     "scripts/weex_order_intent_state.py": {
-      "role": "Pending-order confirmation state store for preview-before-submit trading flows.",
+      "role": "Pending-order confirmation state store for preview-before-submit trading flows, including trading_mode and environment in the risk signature.",
       "when": [
         "saving the latest pending order intent",
         "loading the latest pending order intent",
@@ -264,13 +267,15 @@
       ]
     },
     "scripts/weex_trade_guard.py": {
-      "role": "Trade guard that previews order risk, previews TP/SL conditional order risk, scans current account risk, stores intents, and gates live order submission.",
+      "role": "Trade guard that previews order risk, previews TP/SL conditional order risk, scans current account risk, stores environment-bound intents, and gates live or demo order submission.",
       "when": [
         "previewing a futures or spot order before submission",
+        "previewing a simulated futures order before submission",
         "previewing a futures TP/SL conditional order before submission",
         "emitting localized user confirmation reply text for natural-language flows",
         "reviewing current account-level risk without order parameters",
         "requiring explicit confirmation plus --confirm-live before a real order is sent",
+        "requiring explicit confirmation plus --confirm-demo before a simulated futures order is sent",
         "submitting a previously previewed pending order or TP/SL intent"
       ],
       "depends_on": [

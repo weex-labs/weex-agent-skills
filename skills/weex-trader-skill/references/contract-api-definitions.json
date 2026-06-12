@@ -1446,6 +1446,455 @@
       "weight_ip": 40
     },
     {
+      "key": "sim.account.get_account_balance",
+      "title": "Get Demo Account Balance (USER_DATA)",
+      "category": "sim",
+      "method": "GET",
+      "path": "/capi/v3/sim/balance",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/contract/intro",
+      "requires_auth": true,
+      "request_params": [],
+      "response_params": [
+        {
+          "name": "asset",
+          "type": "String",
+          "description": "Asset name."
+        },
+        {
+          "name": "balance",
+          "type": "String",
+          "description": "Total balance."
+        },
+        {
+          "name": "availableBalance",
+          "type": "String",
+          "description": "Available balance."
+        },
+        {
+          "name": "frozen",
+          "type": "String",
+          "description": "Frozen amount."
+        },
+        {
+          "name": "unrealizePnl",
+          "type": "String",
+          "description": "Unrealized profit and loss."
+        }
+      ],
+      "permission": "USER_DATA",
+      "weight_ip": 5,
+      "weight_uid": 10
+    },
+    {
+      "key": "sim.account.get_all_positions",
+      "title": "Get Demo All Positions (USER_DATA)",
+      "category": "sim",
+      "method": "GET",
+      "path": "/capi/v3/sim/position/allPosition",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/contract/intro",
+      "requires_auth": true,
+      "request_params": [],
+      "response_params": [
+        {
+          "name": "id",
+          "type": "Long",
+          "description": "Position ID."
+        },
+        {
+          "name": "asset",
+          "type": "String",
+          "description": "Associated collateral asset."
+        },
+        {
+          "name": "symbol",
+          "type": "String",
+          "description": "Trading pair."
+        },
+        {
+          "name": "side",
+          "type": "String",
+          "description": "Position direction such as LONG or SHORT."
+        },
+        {
+          "name": "marginType",
+          "type": "String",
+          "description": "Margin mode: CROSSED or ISOLATED."
+        },
+        {
+          "name": "separatedMode",
+          "type": "String",
+          "description": "Position separation mode: COMBINED or SEPARATED."
+        },
+        {
+          "name": "separatedOpenOrderId",
+          "type": "Long",
+          "description": "Separated-position open order ID."
+        },
+        {
+          "name": "leverage",
+          "type": "String",
+          "description": "Position leverage."
+        },
+        {
+          "name": "size",
+          "type": "String",
+          "description": "Current position size."
+        },
+        {
+          "name": "openValue",
+          "type": "String",
+          "description": "Open position value."
+        },
+        {
+          "name": "openFee",
+          "type": "String",
+          "description": "Open fee."
+        },
+        {
+          "name": "fundingFee",
+          "type": "String",
+          "description": "Funding fee."
+        },
+        {
+          "name": "marginSize",
+          "type": "String",
+          "description": "Margin amount in the collateral asset."
+        },
+        {
+          "name": "isolatedMargin",
+          "type": "String",
+          "description": "Isolated margin amount."
+        },
+        {
+          "name": "isAutoAppendIsolatedMargin",
+          "type": "Boolean",
+          "description": "Whether automatic isolated-margin append is enabled."
+        },
+        {
+          "name": "cumOpenSize",
+          "type": "String",
+          "description": "Cumulative open size."
+        },
+        {
+          "name": "cumOpenValue",
+          "type": "String",
+          "description": "Cumulative open value."
+        },
+        {
+          "name": "cumOpenFee",
+          "type": "String",
+          "description": "Cumulative open fee."
+        },
+        {
+          "name": "cumCloseSize",
+          "type": "String",
+          "description": "Cumulative close size."
+        },
+        {
+          "name": "cumCloseValue",
+          "type": "String",
+          "description": "Cumulative close value."
+        },
+        {
+          "name": "cumCloseFee",
+          "type": "String",
+          "description": "Cumulative close fee."
+        },
+        {
+          "name": "cumFundingFee",
+          "type": "String",
+          "description": "Cumulative settled funding fee."
+        },
+        {
+          "name": "cumLiquidateFee",
+          "type": "String",
+          "description": "Cumulative liquidation fee."
+        },
+        {
+          "name": "createdMatchSequenceId",
+          "type": "Long",
+          "description": "Match engine sequence ID at creation."
+        },
+        {
+          "name": "updatedMatchSequenceId",
+          "type": "Long",
+          "description": "Latest match engine sequence ID."
+        },
+        {
+          "name": "createdTime",
+          "type": "Long",
+          "description": "Creation time in Unix milliseconds."
+        },
+        {
+          "name": "updatedTime",
+          "type": "Long",
+          "description": "Update time in Unix milliseconds."
+        },
+        {
+          "name": "unrealizePnl",
+          "type": "String",
+          "description": "Unrealized profit and loss."
+        },
+        {
+          "name": "liquidatePrice",
+          "type": "String",
+          "description": "Estimated liquidation price; 0 means no current liquidation risk."
+        }
+      ],
+      "permission": "USER_DATA",
+      "weight_ip": 10,
+      "weight_uid": 15
+    },
+    {
+      "key": "sim.transaction.get_order_history",
+      "title": "Get Demo Order History (USER_DATA)",
+      "category": "sim",
+      "method": "GET",
+      "path": "/capi/v3/sim/order/history",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/contract/intro",
+      "requires_auth": true,
+      "request_params": [
+        {
+          "name": "symbol",
+          "type": "String",
+          "required": "No",
+          "description": "Optional trading pair filter. Omit by default for demo history because normal contract symbols such as BTCUSDT may be rejected unless the API accepts the exact simulated symbol filter."
+        },
+        {
+          "name": "limit",
+          "type": "Integer",
+          "required": "No",
+          "description": "Number of records per page, 1-1000. Default 500."
+        },
+        {
+          "name": "startTime",
+          "type": "Long",
+          "required": "No",
+          "description": "Start time in Unix milliseconds. Must be less than or equal to endTime."
+        },
+        {
+          "name": "endTime",
+          "type": "Long",
+          "required": "No",
+          "description": "End time in Unix milliseconds. Must be within 90 days of startTime."
+        },
+        {
+          "name": "page",
+          "type": "Integer",
+          "required": "No",
+          "description": "Page index starting from 0. Default 0."
+        }
+      ],
+      "response_params": [
+        {
+          "name": "avgPrice",
+          "type": "String",
+          "description": "Average fill price."
+        },
+        {
+          "name": "clientOrderId",
+          "type": "String",
+          "description": "Client-defined order ID."
+        },
+        {
+          "name": "cumQuote",
+          "type": "String",
+          "description": "Cumulative filled amount in the quote asset."
+        },
+        {
+          "name": "executedQty",
+          "type": "String",
+          "description": "Filled quantity in the base asset."
+        },
+        {
+          "name": "orderId",
+          "type": "Long",
+          "description": "System order ID."
+        },
+        {
+          "name": "origQty",
+          "type": "String",
+          "description": "Original order quantity."
+        },
+        {
+          "name": "price",
+          "type": "String",
+          "description": "Order price."
+        },
+        {
+          "name": "reduceOnly",
+          "type": "Boolean",
+          "description": "Whether the order is reduce-only."
+        },
+        {
+          "name": "side",
+          "type": "String",
+          "description": "Order side."
+        },
+        {
+          "name": "positionSide",
+          "type": "String",
+          "description": "Position side."
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "description": "Order status."
+        },
+        {
+          "name": "stopPrice",
+          "type": "String",
+          "description": "Trigger or stop price when applicable."
+        },
+        {
+          "name": "symbol",
+          "type": "String",
+          "description": "Trading pair."
+        },
+        {
+          "name": "time",
+          "type": "Long",
+          "description": "Order time in Unix milliseconds."
+        },
+        {
+          "name": "timeInForce",
+          "type": "String",
+          "description": "Time-in-force policy."
+        },
+        {
+          "name": "type",
+          "type": "String",
+          "description": "Order type."
+        },
+        {
+          "name": "updateTime",
+          "type": "Long",
+          "description": "Last update time in Unix milliseconds."
+        },
+        {
+          "name": "workingType",
+          "type": "String",
+          "description": "Trigger price source."
+        }
+      ],
+      "permission": "USER_DATA",
+      "weight_ip": 10,
+      "weight_uid": 10
+    },
+    {
+      "key": "sim.transaction.place_order",
+      "title": "Place Demo Order (TRADE)",
+      "category": "sim",
+      "method": "POST",
+      "path": "/capi/v3/sim/order",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/contract/intro",
+      "requires_auth": true,
+      "request_params": [
+        {
+          "name": "symbol",
+          "type": "String",
+          "required": "Yes",
+          "description": "Trading pair, for example BTCSUSDT."
+        },
+        {
+          "name": "side",
+          "type": "String",
+          "required": "Yes",
+          "description": "Order side. Supported values: BUY, SELL."
+        },
+        {
+          "name": "positionSide",
+          "type": "String",
+          "required": "Yes",
+          "description": "Position side. Supported values: LONG, SHORT."
+        },
+        {
+          "name": "type",
+          "type": "String",
+          "required": "Yes",
+          "description": "Order type. Demo order supports LIMIT and MARKET."
+        },
+        {
+          "name": "timeInForce",
+          "type": "String",
+          "required": "Conditional",
+          "description": "Required when type = LIMIT. Supported values: GTC, IOC, FOK, POST_ONLY."
+        },
+        {
+          "name": "quantity",
+          "type": "String",
+          "required": "Yes",
+          "description": "Order quantity. Must be greater than 0."
+        },
+        {
+          "name": "price",
+          "type": "String",
+          "required": "Conditional",
+          "description": "Limit price. Required when type = LIMIT."
+        },
+        {
+          "name": "newClientOrderId",
+          "type": "String",
+          "required": "Yes",
+          "description": "Client-defined order ID, 1-36 chars matching ^[.A-Z:/a-z0-9_-]{1,36}$."
+        },
+        {
+          "name": "tpTriggerPrice",
+          "type": "String",
+          "required": "No",
+          "description": "Optional take-profit trigger price."
+        },
+        {
+          "name": "slTriggerPrice",
+          "type": "String",
+          "required": "No",
+          "description": "Optional stop-loss trigger price."
+        },
+        {
+          "name": "TpWorkingType",
+          "type": "String",
+          "required": "No",
+          "description": "Take-profit trigger price source. Preserve this official field casing."
+        },
+        {
+          "name": "SlWorkingType",
+          "type": "String",
+          "required": "No",
+          "description": "Stop-loss trigger price source. Preserve this official field casing."
+        }
+      ],
+      "response_params": [
+        {
+          "name": "orderId",
+          "type": "String",
+          "description": "Order ID assigned by the system."
+        },
+        {
+          "name": "clientOrderId",
+          "type": "String",
+          "description": "Echo of newClientOrderId."
+        },
+        {
+          "name": "success",
+          "type": "Boolean",
+          "description": "Whether the order request was accepted."
+        },
+        {
+          "name": "errorCode",
+          "type": "String",
+          "description": "Error code when success = false; otherwise empty."
+        },
+        {
+          "name": "errorMessage",
+          "type": "String",
+          "description": "Error message when success = false; otherwise empty."
+        }
+      ],
+      "permission": "TRADE",
+      "weight_ip": 2,
+      "weight_uid": 5
+    },
+    {
       "key": "transaction.cancel_all_orders",
       "title": "Cancel All Open Orders (TRADE)",
       "category": "transaction",

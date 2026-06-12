@@ -119,6 +119,20 @@ def _filter_by_account_scopes(rows: list[dict[str, Any]], account_scopes: set[st
     return [row for row in rows if str(row.get("account_scope") or "") in account_scopes]
 
 
+def _inherit_account_scope(rows: list[dict[str, Any]], account_scope: str | None) -> list[dict[str, Any]]:
+    if not account_scope:
+        return rows
+    inherited: list[dict[str, Any]] = []
+    for row in rows:
+        if row.get("account_scope") in (None, ""):
+            updated = dict(row)
+            updated["account_scope"] = account_scope
+            inherited.append(updated)
+        else:
+            inherited.append(row)
+    return inherited
+
+
 def _filter_by_time_range(
     rows: list[dict[str, Any]],
     *,
@@ -237,6 +251,16 @@ def prepare_replay_payload(
         )
 
     if normalized_account_scopes:
+        top_level_account_scope = str(payload.get("account_scope") or "")
+        if top_level_account_scope in normalized_account_scopes:
+            orders = _inherit_account_scope(orders, top_level_account_scope)
+            fills = _inherit_account_scope(fills, top_level_account_scope)
+            if balances is not None:
+                balances = _inherit_account_scope(balances, top_level_account_scope)
+            if positions is not None:
+                positions = _inherit_account_scope(positions, top_level_account_scope)
+            if bills is not None:
+                bills = _inherit_account_scope(bills, top_level_account_scope)
         orders = _filter_by_account_scopes(orders, normalized_account_scopes)
         fills = _filter_by_account_scopes(fills, normalized_account_scopes)
         if balances is not None:
@@ -304,6 +328,10 @@ def prepare_replay_payload(
         "partial": partial,
         "degraded_reasons": degraded_reasons,
     }
+    for key in ("trading_mode", "environment", "account_scope"):
+        value = _copy_top_level_value(payload, key)
+        if value not in (None, ""):
+            prepared[key] = value
     for key in ("period", "focus", "time_range"):
         value = _copy_top_level_value(payload, key)
         if value not in (None, ""):

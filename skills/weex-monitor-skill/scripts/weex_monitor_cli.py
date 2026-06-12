@@ -30,6 +30,13 @@ VALID_POSITION_SIDES = {"LONG", "SHORT"}
 VALID_OPERATORS = {">", ">=", "<", "<="}
 VALID_CALLBACK_TYPES = {"current_thread"}
 VALID_MARKETS = {"futures"}
+DEFAULT_TRADING_MODE = "live"
+VALID_TRADING_MODES = {"live", "demo"}
+DEMO_EXECUTION_ALLOWED_DEGRADED_REASONS = {
+    "demo_futures_open_orders_unavailable",
+    "demo_futures_conditional_orders_unavailable",
+    "demo_futures_tp_sl_state_unavailable",
+}
 CONFIRMATION_REPLY_TEXT_BY_LANGUAGE = {
     "zh": "确认",
     "en": "confirm",
@@ -79,6 +86,68 @@ def _run_json_command(command: list[str]) -> Any:
         raise MonitorInputError("delegated command did not return JSON") from exc
 
 
+def _normalize_trading_mode(value: Any) -> str:
+    mode = str(value or DEFAULT_TRADING_MODE).strip().lower()
+    if mode not in VALID_TRADING_MODES:
+        raise MonitorInputError("trading_mode must be live or demo")
+    return mode
+
+
+def _environment_for_trading_mode(trading_mode: str, market: str) -> dict[str, Any]:
+    mode = _normalize_trading_mode(trading_mode)
+    if mode == "demo":
+        return {
+            "trading_mode": "demo",
+            "label": "demo",
+            "market": market,
+            "uses_real_funds": False,
+            "notice": "This monitor targets WEEX futures demo mode.",
+        }
+    return {
+        "trading_mode": "live",
+        "label": "live",
+        "market": market,
+        "uses_real_funds": True,
+        "notice": "This monitor targets real WEEX futures trading.",
+    }
+
+
+def _user_facing_trading_mode_label(trading_mode: str, *, language: str = "zh") -> str:
+    mode = _normalize_trading_mode(trading_mode)
+    if language == "en":
+        return "demo trading" if mode == "demo" else "real trading"
+    return "模拟盘" if mode == "demo" else "真实盘"
+
+
+def _environment_prefix_for_trading_mode(trading_mode: str, *, language: str = "zh") -> str:
+    label = _user_facing_trading_mode_label(trading_mode, language=language)
+    if language == "en":
+        return f"Current trading mode: {label}"
+    return f"当前交易环境： {label}"
+
+
+def _confirm_flag_for_trading_mode(trading_mode: str) -> str:
+    return "--confirm-demo" if _normalize_trading_mode(trading_mode) == "demo" else "--confirm-live"
+
+
+def _validate_execution_authorization(
+    trading_mode: str,
+    *,
+    confirm_live: bool,
+    confirm_demo: bool,
+    command_name: str,
+) -> None:
+    if confirm_live and confirm_demo:
+        raise MonitorInputError(f"{command_name} accepts only one matching confirmation flag")
+    mode = _normalize_trading_mode(trading_mode)
+    if mode == "demo":
+        if not confirm_demo or confirm_live:
+            raise MonitorInputError(f"{command_name} for demo trading_mode requires --confirm-demo")
+        return
+    if not confirm_live or confirm_demo:
+        raise MonitorInputError(f"{command_name} for live trading_mode requires --confirm-live")
+
+
 def load_tasks() -> list[dict[str, Any]]:
     database = db_path()
     if database.exists():
@@ -104,6 +173,17 @@ def save_tasks(tasks: list[dict[str, Any]]) -> None:
             _upsert_task(conn, task, updated_at_ms=_now_ms())
 
 
+def _redact_event_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: ("<redacted>" if key == "confirmation_token" else _redact_event_payload(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_event_payload(item) for item in value]
+    return value
+
+
 def load_events(task_id: str | None = None) -> list[dict[str, Any]]:
     if not db_path().exists():
         return []
@@ -121,7 +201,7 @@ def load_events(task_id: str | None = None) -> list[dict[str, Any]]:
             "task_id": row["task_id"],
             "event_type": row["event_type"],
             "created_at_ms": row["created_at_ms"],
-            "payload": json.loads(row["payload_json"]),
+            "payload": _redact_event_payload(json.loads(row["payload_json"])),
         }
         for row in rows
     ]
@@ -137,6 +217,7 @@ def normalize_task(raw_task: dict[str, Any], *, now_ms: int | None = None) -> di
 
     profile = _required_string(raw_task, "profile")
     market = _normalize_market(raw_task.get("market"))
+    trading_mode = _normalize_trading_mode(_required_string(raw_task, "trading_mode"))
     symbol = _required_string(raw_task, "symbol").upper()
     position_side = _normalize_position_side(raw_task.get("position_side"))
     condition = _normalize_condition(raw_task.get("condition"), task_type)
@@ -151,6 +232,8 @@ def normalize_task(raw_task: dict[str, Any], *, now_ms: int | None = None) -> di
         "task_type": task_type,
         "profile": profile,
         "market": market,
+        "trading_mode": trading_mode,
+        "environment": _environment_for_trading_mode(trading_mode, market),
         "symbol": symbol,
         "position_side": position_side,
         "frequency_seconds": frequency_seconds,
@@ -340,7 +423,9 @@ def confirm_task(
     if not confirm_monitor:
         raise MonitorInputError("refusing to activate monitor task without --confirm-monitor")
     if confirmation_token is None or str(confirmation_token).strip() == "":
-        raise MonitorInputError("confirmation-token is required before activating monitor task")
+        raise MonitorInputError(
+            "confirmation-token is required before activating monitor task; reuse the confirm-text returned task and confirmation_token"
+        )
     confirmed_at_ms = now_ms if now_ms is not None else _now_ms()
     task = _merge_normalized_task(raw_task, now_ms=confirmed_at_ms)
     task["status"] = "active"
@@ -405,36 +490,75 @@ def render_confirmation_text(
         else raw_task.get("live_run_duration_seconds")
     )
     if resolved_language == "en":
+        funds_text = "uses real funds" if task["environment"]["uses_real_funds"] else "does not use real funds"
         parts = [
+            _environment_prefix_for_trading_mode(task["trading_mode"], language=resolved_language),
             "Automated Monitor Confirmation",
             f"Task ID: {task['task_id']}",
             f"Account: {task['profile']}",
-            f"Monitor target: {task['symbol']} {_position_side_label(task['position_side'], language=resolved_language)}",
-            f"Trigger condition: {_condition_label(condition, language=resolved_language)}",
-            f"Trigger action: {_action_label(action, language=resolved_language)}",
-            f"Callback: {task['callback']['type']}",
-            "After confirmation, the local monitor rule will be saved; real positions will be read and a real order will be submitted only after you authorize real-account access.",
-            f"If you confirm the monitor settings and authorization above, Reply: {reply_text}",
+            f"Funds: {funds_text}",
         ]
-        parts.insert(6, f"Check frequency: every {task['frequency_seconds']} seconds")
     else:
+        funds_text = "会使用真实资金" if task["environment"]["uses_real_funds"] else "不会使用真实资金"
         parts = [
+            _environment_prefix_for_trading_mode(task["trading_mode"], language=resolved_language),
             "自动化监控确认",
             f"任务编号: {task['task_id']}",
             f"账户: {task['profile']}",
-            f"监控对象: {task['symbol']} {_position_side_label(task['position_side'])}",
-            f"触发条件: {_condition_label(condition)}",
-            f"触发动作: {_action_label(action)}",
-            f"回报位置: {task['callback']['type']}",
-            "确认后会先保存本地监控规则；只有在你授权使用真实账户后，才会读取真实仓位并在触发时提交真实委托。",
-            f"如果你确认上述监控设置与授权，请回复：{reply_text}",
+            f"资金说明: {funds_text}",
         ]
-        parts.insert(6, f"检查频率: 每 {task['frequency_seconds']} 秒")
+
+    if position_snapshot is not None:
+        if resolved_language == "en":
+            position_match_label = (
+                "Matched simulated futures position"
+                if task["trading_mode"] == "demo"
+                else "Matched real-trading position"
+            )
+            parts.append(
+                (
+                    f"{position_match_label}: "
+                    f"{position_snapshot['symbol']} {_position_side_label(position_snapshot['position_side'], language=resolved_language)}, "
+                    f"position size: {position_snapshot['quantity']}, "
+                    f"{_position_pnl_summary(action, position_snapshot, language=resolved_language)}"
+                ),
+            )
+        else:
+            position_match_label = "已匹配模拟盘持仓" if task["trading_mode"] == "demo" else "已匹配真实持仓"
+            parts.append(
+                (
+                    f"{position_match_label}: "
+                    f"{position_snapshot['symbol']} {_position_side_label(position_snapshot['position_side'])}, "
+                    f"持仓数量: {position_snapshot['quantity']}, "
+                    f"{_position_pnl_summary(action, position_snapshot, language=resolved_language)}"
+                ),
+            )
+        parts.append(_pnl_scope_line(task, action, position_snapshot, language=resolved_language))
+        parts.append(_position_detail_line(position_snapshot, language=resolved_language))
+
+    if resolved_language == "en":
+        parts.append(f"Monitor target: {task['symbol']} {_position_side_label(task['position_side'], language=resolved_language)}")
+        parts.append(f"Trigger condition: {_condition_label(condition, language=resolved_language)}")
+    else:
+        parts.append(f"监控对象: {task['symbol']} {_position_side_label(task['position_side'])}")
+        parts.append(f"触发条件: {_condition_label(condition)}")
+
+    if position_snapshot is not None:
+        current_condition_line = _current_condition_line(position_snapshot, language=resolved_language)
+        if current_condition_line is not None:
+            parts.append(current_condition_line)
+
+    if resolved_language == "en":
+        parts.append(f"Check frequency: every {task['frequency_seconds']} seconds")
+    else:
+        parts.append(f"检查频率: 每 {task['frequency_seconds']} 秒")
+
     if duration_seconds is not None:
         if resolved_language == "en":
-            parts.insert(7, f"Run duration: {_duration_label(float(duration_seconds), language=resolved_language)}")
+            parts.append(f"Run duration: {_duration_label(float(duration_seconds), language=resolved_language)}")
         else:
-            parts.insert(7, f"运行时长: {_duration_label(float(duration_seconds))}")
+            parts.append(f"运行时长: {_duration_label(float(duration_seconds))}")
+
     reporting = raw_task.get("codex_reporting")
     if isinstance(reporting, dict) and reporting.get("enabled"):
         interval_seconds = _normalize_codex_reporting_interval_seconds(reporting.get("interval_seconds"))
@@ -444,37 +568,26 @@ def render_confirmation_text(
             if resolved_language == "en"
             else f"状态汇报: 每 {_duration_label(float(interval_seconds))}，通过 Codex thread heartbeat"
         )
-        insert_index = 8 if duration_seconds is not None else 7
-        parts.insert(insert_index, reporting_line)
-    if position_snapshot is not None:
-        if resolved_language == "en":
-            parts.insert(
-                4,
-                (
-                    "Matched live position: "
-                    f"{position_snapshot['symbol']} {_position_side_label(position_snapshot['position_side'], language=resolved_language)}, "
-                    f"position size: {position_snapshot['quantity']}, "
-                    f"current unrealized PnL: {position_snapshot.get('unrealized_pnl', 'unknown')}"
-                ),
-            )
-        else:
-            parts.insert(
-                4,
-                (
-                    "已匹配真实持仓: "
-                    f"{position_snapshot['symbol']} {_position_side_label(position_snapshot['position_side'])}, "
-                    f"持仓数量: {position_snapshot['quantity']}, "
-                    f"当前未实现盈亏: {position_snapshot.get('unrealized_pnl', 'unknown')}"
-                ),
-            )
-        parts.insert(5, _position_detail_line(position_snapshot, language=resolved_language))
-        current_condition_line = _current_condition_line(position_snapshot, language=resolved_language)
-        if current_condition_line is not None:
-            for index, part in enumerate(parts):
-                condition_prefix = "Trigger condition:" if resolved_language == "en" else "触发条件:"
-                if part.startswith(condition_prefix):
-                    parts.insert(index + 1, current_condition_line)
-                    break
+        parts.append(reporting_line)
+
+    if resolved_language == "en":
+        parts.extend(
+            [
+                f"Trigger action: {_action_label(action, language=resolved_language, trading_mode=task['trading_mode'])}",
+                f"Callback: {task['callback']['type']}",
+                "After confirmation, the local monitor rule will be saved; account positions will be read and an order will be submitted only after you authorize the matching trading mode and real-trading access when applicable.",
+                f"If you confirm the monitor settings and authorization above, Reply: {reply_text}",
+            ]
+        )
+    else:
+        parts.extend(
+            [
+                f"触发动作: {_action_label(action, trading_mode=task['trading_mode'])}",
+                f"回报位置: {task['callback']['type']}",
+                "确认后会先保存本地监控规则；只有在你授权使用真实盘或匹配的模拟盘后，才会读取仓位并在触发时提交委托。",
+                f"如果你确认上述监控设置与授权，请回复：{reply_text}",
+            ]
+        )
     return "\n".join(parts)
 
 
@@ -484,6 +597,7 @@ def build_idempotency_key(raw_task: dict[str, Any], purpose: str) -> str:
     task = normalize_task(raw_task)
     fingerprint_payload = {
         "task_type": task["task_type"],
+        "trading_mode": task["trading_mode"],
         "symbol": task["symbol"],
         "position_side": task["position_side"],
         "condition": task["condition"],
@@ -608,13 +722,16 @@ def run_loop_dry_run(
 def run_live_loop(
     *,
     confirm_live: bool,
+    confirm_demo: bool = False,
     iterations: int,
     task_id: str | None = None,
     sleep_seconds: float | None = None,
     now_ms: int | None = None,
 ) -> dict[str, Any]:
-    if not confirm_live:
-        raise MonitorInputError("run-loop live mode requires --confirm-live")
+    if not confirm_live and not confirm_demo:
+        raise MonitorInputError("run-loop live mode requires --confirm-live or --confirm-demo")
+    if confirm_live and confirm_demo:
+        raise MonitorInputError("run-loop accepts only one matching confirmation flag")
     if iterations < 1:
         raise MonitorInputError("iterations must be >= 1")
     if sleep_seconds is not None and sleep_seconds < 0:
@@ -630,7 +747,8 @@ def run_live_loop(
     for index in range(iterations):
         evaluated_at_ms = now_ms + index if now_ms is not None else _now_ms()
         results = run_live_once(
-            confirm_live=True,
+            confirm_live=confirm_live,
+            confirm_demo=confirm_demo,
             task_id=task_id,
             now_ms=evaluated_at_ms,
         )
@@ -663,13 +781,12 @@ def confirm_and_run_live_loop(
     confirm_monitor: bool,
     confirmation_token: str | None,
     confirm_live: bool,
+    confirm_demo: bool = False,
     duration_seconds: Any = None,
     reporting_interval_seconds: Any = None,
     sleep_seconds: float | None = None,
     now_ms: int | None = None,
 ) -> dict[str, Any]:
-    if not confirm_live:
-        raise MonitorInputError("confirm-and-run-loop requires --confirm-live")
     duration_seconds_float = _normalize_duration_seconds(duration_seconds)
     if sleep_seconds is not None and sleep_seconds < 0:
         raise MonitorInputError("sleep_seconds must be >= 0")
@@ -677,6 +794,12 @@ def confirm_and_run_live_loop(
     requested = normalize_task(raw_task)
     if requested["task_type"] != "position_pnl_monitor":
         raise MonitorInputError("confirm-and-run-loop requires position_pnl_monitor")
+    _validate_execution_authorization(
+        requested["trading_mode"],
+        confirm_live=confirm_live,
+        confirm_demo=confirm_demo,
+        command_name="confirm-and-run-loop",
+    )
     if not isinstance(raw_task.get("live_position_confirmation"), dict):
         raise MonitorInputError("live position confirmation is required before starting live monitor")
     _validate_live_confirmation_token(raw_task, confirmation_token, duration_seconds=duration_seconds_float)
@@ -692,14 +815,22 @@ def confirm_and_run_live_loop(
         now_ms=now_ms,
     )
     loop_result = run_live_loop(
-        confirm_live=True,
+        confirm_live=confirm_live,
+        confirm_demo=confirm_demo,
         iterations=iterations,
         task_id=confirmed["task_id"],
         sleep_seconds=sleep_seconds,
         now_ms=now_ms,
     )
+    final_task = confirmed
+    if (
+        loop_result.get("submitted_count") == 0
+        and loop_result.get("iterations_completed", 0) >= loop_result.get("iterations_requested", 0)
+        and _has_active_pnl_tasks(task_id=confirmed["task_id"])
+    ):
+        final_task = cancel_task(confirmed["task_id"])
     agent_reporting = _agent_reporting_metadata_from_task(
-        confirmed,
+        final_task,
         reporting_interval_seconds=reporting_interval_seconds,
     )
     reporting = agent_reporting["runtimes"]["codex"]
@@ -707,7 +838,7 @@ def confirm_and_run_live_loop(
         "combined_confirmation": True,
         "duration_seconds": duration_seconds_float,
         "derived_iterations": iterations,
-        "confirmed_task": confirmed,
+        "confirmed_task": final_task,
         "loop_result": loop_result,
         "reporting": reporting,
         "agent_reporting": agent_reporting,
@@ -812,9 +943,12 @@ def _build_status_reporting_prompt(raw_task: dict[str, Any], *, runtime_label: s
     task = normalize_task(raw_task)
     skill_root = Path(__file__).resolve().parents[1]
     task_id = task["task_id"]
+    environment_prefix = _environment_prefix_for_trading_mode(task["trading_mode"])
     return (
         f"Report WEEX monitor status for the current {runtime_label}.\n"
         f"Task id: {task_id}\n"
+        f"Start the status report with this exact first line: {environment_prefix}\n"
+        f"Internal trading_mode: {task['trading_mode']}\n"
         f"Skill directory: {skill_root}\n"
         "Read-only commands to run from the skill directory:\n"
         f"- python3 scripts/weex_monitor_cli.py list\n"
@@ -822,8 +956,10 @@ def _build_status_reporting_prompt(raw_task: dict[str, Any], *, runtime_label: s
         "Find the task by task_id. Summarize task status, symbol, position side, condition, "
         "latest evaluated current_value, threshold, trigger state, and reason. If the latest "
         "events include exchange_response, live_order_result, close_order, or error details, "
-        "include those. Do not output HTML entities or entity spellings for less-than, greater-than, or "
-        "ampersand characters; render "
+        "include only sanitized summaries such as order id, client order id, status, reason, "
+        "and necessary error code or message; do not quote raw exchange responses, full close order JSON, "
+        "account snapshots, or position details. Do not output HTML entities or entity spellings for less-than, "
+        "greater-than, or ampersand characters; render "
         "comparison operators as readable words in the response language, for example less than "
         "or 小于 for '<', greater than or 大于 for '>', greater than or equal to for '>=', and "
         "less than or equal to for '<='. Do not submit, amend, or cancel WEEX orders. If task status is not "
@@ -847,17 +983,26 @@ def build_live_delegate_plan(
     if not isinstance(close_order, dict):
         raise MonitorInputError("triggered evaluation result is missing close_order")
 
+    is_live_mode = task["trading_mode"] == "live"
     return {
         "delegate_skill": "weex-trader-skill",
-        "requires_live_account_authorization": True,
+        "requires_trading_mode_authorization": True,
+        "requires_real_trading_authorization": is_live_mode,
+        "requires_demo_trading_authorization": not is_live_mode,
         "mutating_request_submitted": False,
         "task_id": task["task_id"],
         "profile": task["profile"],
         "market": task["market"],
+        "trading_mode": task["trading_mode"],
+        "environment": task["environment"],
         "idempotency_key": build_idempotency_key(task, purpose),
         "close_order": close_order,
         "trigger_snapshot": evaluation_result.get("trigger_snapshot", {}),
-        "instruction": "Submit only through weex-trader-skill after the user authorizes real account access and real order execution.",
+        "instruction": (
+            "Submit only through weex-trader-skill with "
+            f"--trading-mode {task['trading_mode']} and {_confirm_flag_for_trading_mode(task['trading_mode'])} "
+            "after the user authorizes the matching trading mode and order execution."
+        ),
     }
 
 
@@ -906,14 +1051,17 @@ def _load_confirmed_active_task(
 def run_live_once(
     *,
     confirm_live: bool,
+    confirm_demo: bool = False,
     task_id: str | None = None,
     now_ms: int | None = None,
 ) -> list[dict[str, Any]]:
-    if not confirm_live:
-        raise MonitorInputError("run-live-once requires --confirm-live")
+    if not confirm_live and not confirm_demo:
+        raise MonitorInputError("run-live-once requires --confirm-live or --confirm-demo")
+    if confirm_live and confirm_demo:
+        raise MonitorInputError("run-live-once accepts only one matching confirmation flag")
     evaluated_at_ms = now_ms if now_ms is not None else _now_ms()
     outputs: list[dict[str, Any]] = []
-    claimed_position_buckets: set[tuple[str, str, str, str]] = set()
+    claimed_position_buckets: set[tuple[str, str, str, str, str]] = set()
 
     for task in load_tasks():
         if task.get("status") != "active":
@@ -922,6 +1070,13 @@ def run_live_once(
             continue
         if task.get("task_type") != "position_pnl_monitor":
             continue
+        normalized_for_auth = normalize_task(task)
+        _validate_execution_authorization(
+            normalized_for_auth["trading_mode"],
+            confirm_live=confirm_live,
+            confirm_demo=confirm_demo,
+            command_name="run-live-once",
+        )
         position_bucket = _position_execution_key(task)
         if position_bucket in claimed_position_buckets:
             current_task = _load_task_by_id(str(task["task_id"])) or task
@@ -1011,6 +1166,8 @@ def run_live_once(
                     task["profile"],
                     "--market",
                     task["market"],
+                    "--trading-mode",
+                    task["trading_mode"],
                     "--order-json",
                     json.dumps(close_order, ensure_ascii=False, separators=(",", ":")),
                     "--ttl-seconds",
@@ -1033,7 +1190,7 @@ def run_live_once(
             )
             continue
         try:
-            exchange_response = _run_json_command(
+            raw_exchange_response = _run_json_command(
                 _trader_script_command(
                     "weex_trade_guard.py",
                     "confirm-order",
@@ -1041,10 +1198,13 @@ def run_live_once(
                     intent_id,
                     "--risk-signature",
                     risk_signature,
-                    "--confirm-live",
+                    "--trading-mode",
+                    task["trading_mode"],
+                    _confirm_flag_for_trading_mode(task["trading_mode"]),
                     "--pretty",
                 )
             )
+            exchange_response = _exchange_response_summary(raw_exchange_response)
         except MonitorInputError as exc:
             outputs.append(
                 _mark_task_review_required(
@@ -1135,6 +1295,8 @@ def claim_task_for_execution(raw_task: dict[str, Any], *, now_ms: int | None = N
                 json.loads(row["task_json"]),
                 now_ms=claimed_at_ms,
             )
+            if duplicate_task["trading_mode"] != task["trading_mode"]:
+                continue
             duplicate_task["status"] = "review_required"
             duplicate_task["review_required_at_ms"] = claimed_at_ms
             duplicate_task["last_failure"] = {
@@ -1252,20 +1414,22 @@ def _collect_live_account_payload(task: dict[str, Any]) -> dict[str, Any]:
             str(task["profile"]),
             "--market",
             str(task["market"]),
+            "--trading-mode",
+            str(task["trading_mode"]),
             "--symbol",
             str(task["symbol"]),
             "--pretty",
         )
     )
     if not isinstance(payload, dict):
-        raise MonitorInputError("live account payload must be a JSON object")
+        raise MonitorInputError("account-risk payload must be a JSON object")
     return payload
 
 
 def _positions_from_account_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
     positions = payload.get("positions")
     if not isinstance(positions, list):
-        raise MonitorInputError("live account payload positions must be a JSON array")
+        raise MonitorInputError("account-risk payload positions must be a JSON array")
     return [item for item in positions if isinstance(item, dict)]
 
 
@@ -1443,10 +1607,21 @@ def _snapshot_time_label(snapshot_at_ms: int | None, *, language: str = "zh") ->
 
 
 def _live_payload_blocker(payload: dict[str, Any]) -> str | None:
+    degraded_reasons = payload.get("degraded_reasons")
+    reason_set = (
+        {str(reason) for reason in degraded_reasons if reason not in (None, "")}
+        if isinstance(degraded_reasons, list)
+        else set()
+    )
+    environment = payload.get("environment")
+    if not isinstance(environment, dict):
+        environment = {}
+    mode = _normalize_trading_mode(payload.get("trading_mode") or environment.get("trading_mode"))
+    if mode == "demo" and reason_set and reason_set.issubset(DEMO_EXECUTION_ALLOWED_DEGRADED_REASONS):
+        return None
     if payload.get("partial"):
         return "live_data_partial"
-    degraded_reasons = payload.get("degraded_reasons")
-    if isinstance(degraded_reasons, list) and degraded_reasons:
+    if reason_set:
         return "live_data_degraded"
     return None
 
@@ -1488,16 +1663,21 @@ def render_live_thread_report(
     result: dict[str, Any],
     exchange_response: dict[str, Any] | None,
 ) -> str:
+    mode_label = "Demo" if task.get("trading_mode") == "demo" else "Live"
+    check_label = "demo" if task.get("trading_mode") == "demo" else "live"
+    prefix = _environment_prefix_for_trading_mode(task.get("trading_mode") or DEFAULT_TRADING_MODE)
     if result.get("triggered") and exchange_response is not None:
         snapshot = result.get("trigger_snapshot", {})
         return (
-            f"WEEX monitor {task['task_id']} Live close order submitted: "
+            f"{prefix}\n"
+            f"WEEX monitor {task['task_id']} {mode_label} close order submitted: "
             f"{snapshot.get('symbol')} {snapshot.get('position_side')} "
             f"{snapshot.get('unrealized_pnl')} {snapshot.get('operator')} {snapshot.get('threshold')}. "
-            f"Exchange response: {exchange_response}."
+            f"Exchange summary: {exchange_response}."
         )
     return (
-        f"WEEX monitor {task['task_id']} live check did not submit a close order: "
+        f"{prefix}\n"
+        f"WEEX monitor {task['task_id']} {check_label} check did not submit a close order: "
         f"{result.get('reason', 'unknown_reason')}."
     )
 
@@ -1507,28 +1687,52 @@ def render_thread_report(output: dict[str, Any]) -> str:
     result = output.get("result", {})
     if not isinstance(result, dict):
         raise MonitorInputError("result output must be a JSON object")
+    environment = output.get("environment")
+    if not isinstance(environment, dict):
+        environment = {}
+    delegate_plan = output.get("live_delegate_plan")
+    if not isinstance(delegate_plan, dict):
+        delegate_plan = {}
+    delegate_environment = delegate_plan.get("environment")
+    if not isinstance(delegate_environment, dict):
+        delegate_environment = {}
+    trading_mode = _normalize_trading_mode(
+        output.get("trading_mode")
+        or environment.get("trading_mode")
+        or delegate_plan.get("trading_mode")
+        or delegate_environment.get("trading_mode")
+    )
+    prefix = _environment_prefix_for_trading_mode(trading_mode)
+    if trading_mode == "demo":
+        authorization_sentence = "Demo trading authorization is required before a demo order can be submitted. "
+        no_order_sentence = "No order was submitted by weex-monitor-skill."
+    else:
+        authorization_sentence = "Real trading authorization is required before a real order can be submitted. "
+        no_order_sentence = "No live order was submitted by weex-monitor-skill."
     if result.get("triggered"):
         snapshot = result.get("trigger_snapshot", {})
         close_order = result.get("close_order", {})
         return (
+            f"{prefix}\n"
             f"WEEX monitor {task_id} dry-run triggered: "
             f"{snapshot.get('symbol')} {snapshot.get('position_side')} "
             f"{snapshot.get('unrealized_pnl')} {snapshot.get('operator')} {snapshot.get('threshold')}. "
             f"Planned close order: {close_order}. "
-            "Real-account authorization is required before a real order can be submitted. "
-            "No live order was submitted by weex-monitor-skill."
+            f"{authorization_sentence}"
+            f"{no_order_sentence}"
         )
     return (
+        f"{prefix}\n"
         f"WEEX monitor {task_id} dry-run not triggered: "
         f"{result.get('reason', 'unknown_reason')}. "
-        "No live order was submitted by weex-monitor-skill."
+        f"{no_order_sentence}"
     )
 
 
 @contextmanager
 def _connect() -> Any:
     home = monitor_home()
-    home.mkdir(parents=True, exist_ok=True)
+    _ensure_private_monitor_store(home, db_path())
     conn = sqlite3.connect(db_path())
     conn.row_factory = sqlite3.Row
     _ensure_schema(conn)
@@ -1540,6 +1744,14 @@ def _connect() -> Any:
         raise
     finally:
         conn.close()
+
+
+def _ensure_private_monitor_store(home: Path, database: Path) -> None:
+    home.mkdir(mode=0o700, parents=True, exist_ok=True)
+    home.chmod(0o700)
+    fd = os.open(database, os.O_RDWR | os.O_CREAT, 0o600)
+    os.close(fd)
+    database.chmod(0o600)
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -1702,6 +1914,21 @@ def _consume_confirmation_token(
     task: dict[str, Any],
     used_at_ms: int,
 ) -> None:
+    task_hash = _confirmation_fingerprint(task)
+    cursor = conn.execute(
+        """
+        UPDATE monitor_confirmations
+        SET used_at_ms = ?
+        WHERE confirmation_token = ?
+          AND task_id = ?
+          AND task_hash = ?
+          AND used_at_ms IS NULL
+        """,
+        (used_at_ms, confirmation_token, task["task_id"], task_hash),
+    )
+    if cursor.rowcount == 1:
+        return
+
     row = conn.execute(
         """
         SELECT task_id, task_hash, used_at_ms
@@ -1711,17 +1938,14 @@ def _consume_confirmation_token(
         (confirmation_token,),
     ).fetchone()
     if row is None:
-        raise MonitorInputError("confirmation-token was not rendered by confirm-text")
+        raise MonitorInputError("confirmation-token was not rendered by confirm-text; reuse the confirm-text returned task")
     if row["used_at_ms"] is not None:
         raise MonitorInputError("confirmation-token has already been used")
     if row["task_id"] != task["task_id"]:
-        raise MonitorInputError("confirmation-token does not match task_id")
-    if row["task_hash"] != _confirmation_fingerprint(task):
-        raise MonitorInputError("confirmation-token does not match monitor task details")
-    conn.execute(
-        "UPDATE monitor_confirmations SET used_at_ms = ? WHERE confirmation_token = ?",
-        (used_at_ms, confirmation_token),
-    )
+        raise MonitorInputError("confirmation-token does not match task_id; reuse the confirm-text returned task")
+    if row["task_hash"] != task_hash:
+        raise MonitorInputError("confirmation-token does not match monitor task details; reuse the confirm-text returned task")
+    raise MonitorInputError("confirmation-token has already been used")
 
 
 def _validate_live_confirmation_token(
@@ -1744,20 +1968,28 @@ def _validate_live_confirmation_token(
             WHERE confirmation_token = ?
             """,
             (str(confirmation_token).strip(),),
-        ).fetchone()
+    ).fetchone()
     if row is None:
-        raise MonitorInputError("live confirmation token was not rendered by confirm-text-live")
+        raise MonitorInputError(
+            "live confirmation token was not rendered by confirm-text-live; reuse the confirm-text-live returned task"
+        )
     if row["used_at_ms"] is not None:
         raise MonitorInputError("live confirmation token has already been used")
 
     stored_task = json.loads(row["task_json"])
     if row["task_id"] != normalize_task(raw_task)["task_id"]:
-        raise MonitorInputError("live confirmation token does not match task_id")
+        raise MonitorInputError(
+            "live confirmation token does not match task_id; reuse the confirm-text-live returned task"
+        )
     if row["task_hash"] != _confirmation_fingerprint(raw_task):
-        raise MonitorInputError("live confirmation token does not match monitor task details")
+        raise MonitorInputError(
+            "live confirmation token does not match monitor task details; reuse the confirm-text-live returned task"
+        )
     stored_live_snapshot = stored_task.get("live_position_confirmation")
     if not isinstance(stored_live_snapshot, dict):
-        raise MonitorInputError("live confirmation token was not rendered by confirm-text-live")
+        raise MonitorInputError(
+            "live confirmation token was not rendered by confirm-text-live; reuse the confirm-text-live returned task"
+        )
     if stored_live_snapshot != rendered_live_snapshot:
         raise MonitorInputError("live confirmation snapshot does not match rendered confirmation")
     stored_duration = stored_task.get("live_run_duration_seconds")
@@ -1774,6 +2006,7 @@ def _confirmation_fingerprint(raw_task: dict[str, Any]) -> str:
         "task_type": task["task_type"],
         "profile": task["profile"],
         "market": task["market"],
+        "trading_mode": task["trading_mode"],
         "symbol": task["symbol"],
         "position_side": task["position_side"],
         "frequency_seconds": task["frequency_seconds"],
@@ -1790,14 +2023,64 @@ def _new_confirmation_token() -> str:
     return f"mconf_{uuid.uuid4().hex}"
 
 
-def _position_execution_key(raw_task: dict[str, Any]) -> tuple[str, str, str, str]:
+def _position_execution_key(raw_task: dict[str, Any]) -> tuple[str, str, str, str, str]:
     task = normalize_task(raw_task)
     return (
         task["profile"],
+        task["trading_mode"],
         task["market"],
         task["symbol"],
         task["position_side"],
     )
+
+
+def _exchange_response_summary(response: Any) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        return {
+            "status": "response_returned",
+            "response_type": type(response).__name__,
+        }
+
+    summary: dict[str, Any] = {}
+    field_aliases: tuple[tuple[str, tuple[str, ...]], ...] = (
+        ("ok", ("ok", "success")),
+        ("order_id", ("order_id", "orderId", "ordId", "id")),
+        (
+            "client_order_id",
+            ("client_order_id", "clientOrderId", "clientOid", "newClientOrderId"),
+        ),
+        ("status", ("status", "state", "orderStatus", "order_status")),
+        ("code", ("code", "errorCode", "errCode")),
+        ("message", ("message", "msg", "errorMsg", "error_message")),
+        ("reason", ("reason", "errorReason")),
+    )
+    candidates = _exchange_response_summary_candidates(response)
+    for output_key, aliases in field_aliases:
+        value = _first_summary_value(candidates, aliases)
+        if value is not None:
+            summary[output_key] = value
+    if not summary:
+        summary["status"] = "response_returned"
+    return summary
+
+
+def _exchange_response_summary_candidates(response: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates = [response]
+    for key in ("data", "result", "order", "error"):
+        value = response.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
+        elif isinstance(value, list):
+            candidates.extend(item for item in value if isinstance(item, dict))
+    return candidates
+
+
+def _first_summary_value(candidates: list[dict[str, Any]], keys: tuple[str, ...]) -> Any:
+    for candidate in candidates:
+        value = _first_present(candidate, keys)
+        if isinstance(value, (str, int, float, bool)):
+            return value
+    return None
 
 
 def _required_string(payload: dict[str, Any], key: str) -> str:
@@ -1829,7 +2112,11 @@ def _normalize_condition(value: Any, task_type: str) -> dict[str, str]:
 
     metric = _required_string(value, "metric")
     if metric != "unrealized_pnl":
-        raise MonitorInputError(f"{task_type} condition metric must be unrealized_pnl")
+        raise MonitorInputError(
+            f"{task_type} condition metric must be unrealized_pnl. "
+            "Price-threshold closes are not local monitor tasks; use weex-trader-skill "
+            "official conditional orders or TP/SL instead."
+        )
 
     operator = _required_string(value, "operator")
     if operator not in VALID_OPERATORS:
@@ -2046,16 +2333,116 @@ def _position_detail_line(position_snapshot: dict[str, Any], *, language: str = 
     return "仓位明细: " + ", ".join(details)
 
 
-def _action_label(action: dict[str, str], *, language: str = "zh") -> str:
+def _pnl_scope_line(
+    task: dict[str, Any],
+    action: dict[str, str],
+    position_snapshot: dict[str, Any],
+    *,
+    language: str = "zh",
+) -> str:
+    symbol = str(position_snapshot.get("symbol") or task["symbol"])
+    position_side = str(position_snapshot.get("position_side") or task["position_side"])
+    position_size = str(position_snapshot.get("quantity") or "unknown")
+    action_quantity = action.get("quantity")
+
+    if language == "en":
+        side_label = _position_side_label(position_side, language=language)
+        base = (
+            f"PnL scope: this monitor evaluates aggregate position unrealized PnL for "
+            f"{symbol} {side_label}, not isolated single-order PnL."
+        )
+        if action_quantity:
+            if _decimal_texts_differ(position_size, action_quantity):
+                return (
+                    f"{base} The aggregate position size {position_size} differs from fixed close quantity "
+                    f"{action_quantity}; if triggered, only the fixed close quantity will be submitted."
+                )
+            return f"{base} If triggered, the fixed close quantity {action_quantity} will be submitted."
+        return f"{base} If triggered, the matched position size at trigger time will be submitted."
+
+    side_label = _position_side_label(position_side)
+    base = f"盈亏口径: 本监控按 {symbol} {side_label} 聚合持仓未实现盈亏触发，不是单笔订单独立盈亏。"
+    if action_quantity:
+        if _decimal_texts_differ(position_size, action_quantity):
+            return (
+                f"{base} 聚合持仓数量 {position_size} 与固定平仓数量 {action_quantity} 不同；"
+                "触发时只会提交固定平仓数量。"
+            )
+        return f"{base} 触发时会提交固定平仓数量 {action_quantity}。"
+    return f"{base} 触发时会提交触发时匹配持仓数量。"
+
+
+def _position_pnl_summary(
+    action: dict[str, str],
+    position_snapshot: dict[str, Any],
+    *,
+    language: str = "zh"
+) -> str:
+    action_quantity = action.get("quantity")
+    total_pnl = _snapshot_value(position_snapshot.get("unrealized_pnl"), language=language)
+    if not action_quantity:
+        if language == "en":
+            return f"current unrealized PnL: {total_pnl}"
+        return f"当前未实现盈亏: {total_pnl}"
+
+    prorated_pnl = _prorated_pnl_value(position_snapshot, action_quantity, language=language)
+    if language == "en":
+        return (
+            f"aggregate total unrealized PnL: {total_pnl}, "
+            f"unrealized PnL prorated to fixed close quantity {action_quantity}: {prorated_pnl}"
+        )
+    return (
+        f"聚合持仓总未实现盈亏: {total_pnl}, "
+        f"按固定平仓数量 {action_quantity} 折算未实现盈亏: {prorated_pnl}"
+    )
+
+
+def _prorated_pnl_value(
+    position_snapshot: dict[str, Any],
+    action_quantity: Any,
+    *,
+    language: str = "zh",
+) -> str:
+    try:
+        total_pnl = _decimal_from_any(position_snapshot.get("unrealized_pnl"), "unrealized_pnl")
+        position_size = _decimal_from_any(position_snapshot.get("quantity"), "position_size")
+        fixed_quantity = _decimal_from_any(action_quantity, "action_quantity")
+    except MonitorInputError:
+        return _missing_value_label(language)
+    if not total_pnl.is_finite() or not position_size.is_finite() or not fixed_quantity.is_finite():
+        return _missing_value_label(language)
+    if position_size == 0:
+        return _missing_value_label(language)
+    return _format_decimal_for_display(total_pnl * fixed_quantity / position_size)
+
+
+def _format_decimal_for_display(value: Decimal) -> str:
+    if value == 0:
+        return "0"
+    quantized = value.quantize(Decimal("0.00000001"))
+    return format(quantized.normalize(), "f")
+
+
+def _decimal_texts_differ(left: Any, right: Any) -> bool:
+    try:
+        return _decimal_from_any(left, "left") != _decimal_from_any(right, "right")
+    except MonitorInputError:
+        return str(left).strip() != str(right).strip()
+
+
+def _action_label(action: dict[str, str], *, language: str = "zh", trading_mode: str = DEFAULT_TRADING_MODE) -> str:
     if action["type"] == "market_close":
         if action.get("quantity"):
             quantity_label = action["quantity"]
         else:
             quantity_label = "matched position size at trigger time" if language == "en" else "触发时匹配持仓数量"
+        mode = _normalize_trading_mode(trading_mode)
         if language == "en":
             side_label = "long" if action["target"] == "LONG" else "short"
-            return f"Submit a real market close-{side_label} order, close quantity: {quantity_label}"
-        return f"提交真实市价平{_position_side_label(action['target'])}，平仓数量: {quantity_label}"
+            trading_mode_label = _user_facing_trading_mode_label(mode, language=language)
+            return f"Submit a market close-{side_label} order using {trading_mode_label}, close quantity: {quantity_label}"
+        trading_mode_label = "模拟盘" if mode == "demo" else "真实盘"
+        return f"提交{trading_mode_label}市价平{_position_side_label(action['target'])}，平仓数量: {quantity_label}"
     return action["type"]
 
 
@@ -2178,7 +2565,12 @@ def build_parser() -> argparse.ArgumentParser:
     live_confirm = subparsers.add_parser("confirm-text-live")
     live_confirm.add_argument("--task-json")
     live_confirm.add_argument("--task-file")
-    live_confirm.add_argument("--duration-seconds", type=float)
+    live_confirm.add_argument(
+        "--duration-seconds",
+        type=float,
+        required=True,
+        help="Required finite live run duration in seconds.",
+    )
     live_confirm.add_argument("--reporting-interval-seconds", type=int)
     live_confirm.add_argument("--language", choices=("zh", "en"), default=None)
 
@@ -2188,7 +2580,8 @@ def build_parser() -> argparse.ArgumentParser:
     eval_pnl.add_argument("--positions-json")
     eval_pnl.add_argument("--positions-file")
 
-    subparsers.add_parser("list")
+    list_parser = subparsers.add_parser("list")
+    list_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     events = subparsers.add_parser("events")
     events.add_argument("--task-id")
@@ -2201,11 +2594,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_live_once_parser = subparsers.add_parser("run-live-once")
     run_live_once_parser.add_argument("--confirm-live", action="store_true")
+    run_live_once_parser.add_argument("--confirm-demo", action="store_true")
     run_live_once_parser.add_argument("--task-id")
 
     run_loop = subparsers.add_parser("run-loop")
     run_loop.add_argument("--dry-run", action="store_true")
     run_loop.add_argument("--confirm-live", action="store_true")
+    run_loop.add_argument("--confirm-demo", action="store_true")
     run_loop.add_argument("--task-id")
     run_loop.add_argument("--iterations", type=int, default=1)
     run_loop.add_argument("--sleep-seconds", type=float)
@@ -2218,6 +2613,7 @@ def build_parser() -> argparse.ArgumentParser:
     confirm_and_run.add_argument("--confirm-monitor", action="store_true")
     confirm_and_run.add_argument("--confirmation-token")
     confirm_and_run.add_argument("--confirm-live", action="store_true")
+    confirm_and_run.add_argument("--confirm-demo", action="store_true")
     confirm_and_run.add_argument("--duration-seconds", type=float, required=True)
     confirm_and_run.add_argument("--reporting-interval-seconds", type=int)
     confirm_and_run.add_argument("--sleep-seconds", type=float)
@@ -2271,14 +2667,21 @@ def main(argv: list[str] | None = None) -> int:
             positions = _read_json_arg(args.positions_json, args.positions_file, name="positions")
             _print_json(run_once_dry_run(positions, task_id=args.task_id))
         elif args.command == "run-live-once":
-            _print_json(run_live_once(confirm_live=args.confirm_live, task_id=args.task_id))
+            _print_json(
+                run_live_once(
+                    confirm_live=args.confirm_live,
+                    confirm_demo=args.confirm_demo,
+                    task_id=args.task_id,
+                )
+            )
         elif args.command == "run-loop":
-            if args.dry_run and args.confirm_live:
-                raise MonitorInputError("run-loop uses either --dry-run or --confirm-live, not both")
-            if args.confirm_live:
+            if args.dry_run and (args.confirm_live or args.confirm_demo):
+                raise MonitorInputError("run-loop uses either --dry-run or one confirm flag, not both")
+            if args.confirm_live or args.confirm_demo:
                 _print_json(
                     run_live_loop(
-                        confirm_live=True,
+                        confirm_live=args.confirm_live,
+                        confirm_demo=args.confirm_demo,
                         iterations=args.iterations,
                         task_id=args.task_id,
                         sleep_seconds=args.sleep_seconds,
@@ -2286,7 +2689,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 if not args.dry_run:
-                    raise MonitorInputError("run-loop requires --dry-run or --confirm-live")
+                    raise MonitorInputError("run-loop requires --dry-run, --confirm-live, or --confirm-demo")
                 positions_sequence = _read_json_arg(
                     args.positions_sequence_json,
                     args.positions_sequence_file,
@@ -2308,6 +2711,7 @@ def main(argv: list[str] | None = None) -> int:
                     confirm_monitor=args.confirm_monitor,
                     confirmation_token=args.confirmation_token,
                     confirm_live=args.confirm_live,
+                    confirm_demo=args.confirm_demo,
                     duration_seconds=args.duration_seconds,
                     reporting_interval_seconds=args.reporting_interval_seconds,
                     sleep_seconds=args.sleep_seconds,

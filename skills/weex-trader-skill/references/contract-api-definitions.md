@@ -2,18 +2,22 @@
 
 Generated from live V3 docs on 2026-04-17.
 
+Contract simulated futures endpoints are maintained in this generated catalog from the official WEEX contract demo API docs.
+Demo is not a local dry-run; demo mutating endpoints send requests to WEEX futures demo mode.
+
 ## Contents
 
 - Summary table
 - `account.*` endpoint sections
 - `market.*` endpoint sections
+- `sim.*` endpoint sections
 - `transaction.*` endpoint sections
 
 Use in-page search with the exact endpoint key from the summary table to jump to a specific generated section quickly.
 
 ## Summary Table
 
-Total endpoints: **43**
+Total endpoints: **47**
 
 | Key | Method | Path | Auth |
 |---|---|---|---|
@@ -43,6 +47,10 @@ Total endpoints: **43**
 | `market.get_server_time` | `GET` | `/capi/v3/market/time` | `False` |
 | `market.get_symbol_price` | `GET` | `/capi/v3/market/symbolPrice` | `False` |
 | `market.get_ticker24h` | `GET` | `/capi/v3/market/ticker/24hr` | `False` |
+| `sim.account.get_account_balance` | `GET` | `/capi/v3/sim/balance` | `True` |
+| `sim.account.get_all_positions` | `GET` | `/capi/v3/sim/position/allPosition` | `True` |
+| `sim.transaction.get_order_history` | `GET` | `/capi/v3/sim/order/history` | `True` |
+| `sim.transaction.place_order` | `POST` | `/capi/v3/sim/order` | `True` |
 | `transaction.cancel_all_orders` | `DELETE` | `/capi/v3/allOpenOrders` | `True` |
 | `transaction.cancel_all_pending_orders` | `DELETE` | `/capi/v3/algoOpenOrders` | `True` |
 | `transaction.cancel_order` | `DELETE` | `/capi/v3/order` | `True` |
@@ -756,6 +764,160 @@ NONE
 | `indexPrice` | `String` | Last index price |
 | `openTime` | `Long` | Timestamp of the first trade in the 24-hour window |
 | `closeTime` | `Long` | Timestamp of the last trade in the 24-hour window |
+
+## Sim Endpoint Sections
+
+## sim.account.get_account_balance — Get Demo Account Balance (USER_DATA)
+
+- Method: `GET`
+- Path: `/capi/v3/sim/balance`
+- Category: `sim`
+- Requires Auth: `True`
+- Permission: `USER_DATA`
+- Weight(IP/UID): `5 / 10`
+- Source: https://www.weex.com/api-doc/zh-CN/contract/intro
+
+### Request Parameters
+
+NONE
+
+### Response Parameters
+
+| Name | Type | Description |
+|---|---|---|
+| `asset` | `String` | Asset name. |
+| `balance` | `String` | Total balance. |
+| `availableBalance` | `String` | Available balance. |
+| `frozen` | `String` | Frozen amount. |
+| `unrealizePnl` | `String` | Unrealized profit and loss. |
+
+## sim.account.get_all_positions — Get Demo All Positions (USER_DATA)
+
+- Method: `GET`
+- Path: `/capi/v3/sim/position/allPosition`
+- Category: `sim`
+- Requires Auth: `True`
+- Permission: `USER_DATA`
+- Weight(IP/UID): `10 / 15`
+- Source: https://www.weex.com/api-doc/zh-CN/contract/intro
+
+### Request Parameters
+
+NONE
+
+### Response Parameters
+
+| Name | Type | Description |
+|---|---|---|
+| `id` | `Long` | Position ID. |
+| `asset` | `String` | Associated collateral asset. |
+| `symbol` | `String` | Trading pair. |
+| `side` | `String` | Position direction such as LONG or SHORT. |
+| `marginType` | `String` | Margin mode: CROSSED or ISOLATED. |
+| `separatedMode` | `String` | Position separation mode: COMBINED or SEPARATED. |
+| `separatedOpenOrderId` | `Long` | Separated-position open order ID. |
+| `leverage` | `String` | Position leverage. |
+| `size` | `String` | Current position size. |
+| `openValue` | `String` | Open position value. |
+| `openFee` | `String` | Open fee. |
+| `fundingFee` | `String` | Funding fee. |
+| `marginSize` | `String` | Margin amount in the collateral asset. |
+| `isolatedMargin` | `String` | Isolated margin amount. |
+| `isAutoAppendIsolatedMargin` | `Boolean` | Whether automatic isolated-margin append is enabled. |
+| `cumOpenSize` | `String` | Cumulative open size. |
+| `cumOpenValue` | `String` | Cumulative open value. |
+| `cumOpenFee` | `String` | Cumulative open fee. |
+| `cumCloseSize` | `String` | Cumulative close size. |
+| `cumCloseValue` | `String` | Cumulative close value. |
+| `cumCloseFee` | `String` | Cumulative close fee. |
+| `cumFundingFee` | `String` | Cumulative settled funding fee. |
+| `cumLiquidateFee` | `String` | Cumulative liquidation fee. |
+| `createdMatchSequenceId` | `Long` | Match engine sequence ID at creation. |
+| `updatedMatchSequenceId` | `Long` | Latest match engine sequence ID. |
+| `createdTime` | `Long` | Creation time in Unix milliseconds. |
+| `updatedTime` | `Long` | Update time in Unix milliseconds. |
+| `unrealizePnl` | `String` | Unrealized profit and loss. |
+| `liquidatePrice` | `String` | Estimated liquidation price; 0 means no current liquidation risk. |
+
+## sim.transaction.get_order_history — Get Demo Order History (USER_DATA)
+
+- Method: `GET`
+- Path: `/capi/v3/sim/order/history`
+- Category: `sim`
+- Requires Auth: `True`
+- Permission: `USER_DATA`
+- Weight(IP/UID): `10 / 10`
+- Source: https://www.weex.com/api-doc/zh-CN/contract/intro
+
+### Request Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `symbol` | `String` | `No` | Optional trading pair filter. Omit by default for demo history because normal contract symbols such as `BTCUSDT` may be rejected unless the API accepts the exact simulated symbol filter. |
+| `limit` | `Integer` | `No` | Number of records per page, 1-1000. Default 500. |
+| `startTime` | `Long` | `No` | Start time in Unix milliseconds. Must be less than or equal to endTime. |
+| `endTime` | `Long` | `No` | End time in Unix milliseconds. Must be within 90 days of startTime. |
+| `page` | `Integer` | `No` | Page index starting from 0. Default 0. |
+
+### Response Parameters
+
+| Name | Type | Description |
+|---|---|---|
+| `avgPrice` | `String` | Average fill price. |
+| `clientOrderId` | `String` | Client-defined order ID. |
+| `cumQuote` | `String` | Cumulative filled amount in the quote asset. |
+| `executedQty` | `String` | Filled quantity in the base asset. |
+| `orderId` | `Long` | System order ID. |
+| `origQty` | `String` | Original order quantity. |
+| `price` | `String` | Order price. |
+| `reduceOnly` | `Boolean` | Whether the order is reduce-only. |
+| `side` | `String` | Order side. |
+| `positionSide` | `String` | Position side. |
+| `status` | `String` | Order status. |
+| `stopPrice` | `String` | Trigger or stop price when applicable. |
+| `symbol` | `String` | Trading pair. |
+| `time` | `Long` | Order time in Unix milliseconds. |
+| `timeInForce` | `String` | Time-in-force policy. |
+| `type` | `String` | Order type. |
+| `updateTime` | `Long` | Last update time in Unix milliseconds. |
+| `workingType` | `String` | Trigger price source. |
+
+## sim.transaction.place_order — Place Demo Order (TRADE)
+
+- Method: `POST`
+- Path: `/capi/v3/sim/order`
+- Category: `sim`
+- Requires Auth: `True`
+- Permission: `TRADE`
+- Weight(IP/UID): `2 / 5`
+- Source: https://www.weex.com/api-doc/zh-CN/contract/intro
+
+### Request Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `symbol` | `String` | `Yes` | Trading pair, for example BTCSUSDT. |
+| `side` | `String` | `Yes` | Order side. Supported values: BUY, SELL. |
+| `positionSide` | `String` | `Yes` | Position side. Supported values: LONG, SHORT. |
+| `type` | `String` | `Yes` | Order type. Demo order supports LIMIT and MARKET. |
+| `timeInForce` | `String` | `Conditional` | Required when type = LIMIT. Supported values: GTC, IOC, FOK, POST_ONLY. |
+| `quantity` | `String` | `Yes` | Order quantity. Must be greater than 0. |
+| `price` | `String` | `Conditional` | Limit price. Required when type = LIMIT. |
+| `newClientOrderId` | `String` | `Yes` | Client-defined order ID, 1-36 chars matching ^[.A-Z:/a-z0-9_-]{1,36}$. |
+| `tpTriggerPrice` | `String` | `No` | Optional take-profit trigger price. |
+| `slTriggerPrice` | `String` | `No` | Optional stop-loss trigger price. |
+| `TpWorkingType` | `String` | `No` | Take-profit trigger price source. Preserve this official field casing. |
+| `SlWorkingType` | `String` | `No` | Stop-loss trigger price source. Preserve this official field casing. |
+
+### Response Parameters
+
+| Name | Type | Description |
+|---|---|---|
+| `orderId` | `String` | Order ID assigned by the system. |
+| `clientOrderId` | `String` | Echo of newClientOrderId. |
+| `success` | `Boolean` | Whether the order request was accepted. |
+| `errorCode` | `String` | Error code when success = false; otherwise empty. |
+| `errorMessage` | `String` | Error message when success = false; otherwise empty. |
 
 ## Transaction Endpoint Sections
 

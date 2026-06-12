@@ -26,9 +26,19 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def build_risk_signature(order_preview: dict[str, Any], analysis_output: dict[str, Any]) -> str:
+def build_risk_signature(
+    *,
+    profile_name: str,
+    market: str,
+    trading_mode: str,
+    order_preview: dict[str, Any],
+    analysis_output: dict[str, Any],
+) -> str:
     serialized = json.dumps(
         {
+            "profile_name": profile_name,
+            "market": market,
+            "trading_mode": trading_mode,
             "order_preview": order_preview,
             "alerts": analysis_output.get("alerts", []),
         },
@@ -42,6 +52,8 @@ def build_intent(
     *,
     profile_name: str,
     market: str,
+    trading_mode: str = "live",
+    environment: dict[str, Any] | None = None,
     order_preview: dict[str, Any],
     raw_order: dict[str, Any],
     analysis_output: dict[str, Any],
@@ -57,14 +69,23 @@ def build_intent(
         "intent_type": intent_type,
         "profile_name": profile_name,
         "market": market,
+        "trading_mode": trading_mode,
         "created_at": current_ms,
         "expires_at": expires_at,
         "ttl_seconds": ttl_seconds,
         "order_preview": order_preview,
         "raw_order": raw_order,
         "analysis_output": analysis_output,
-        "risk_signature": build_risk_signature(order_preview, analysis_output),
+        "risk_signature": build_risk_signature(
+            profile_name=profile_name,
+            market=market,
+            trading_mode=trading_mode,
+            order_preview=order_preview,
+            analysis_output=analysis_output,
+        ),
     }
+    if environment is not None:
+        payload["environment"] = environment
     if tp_sl_order is not None:
         payload["tp_sl_order"] = tp_sl_order
     return payload

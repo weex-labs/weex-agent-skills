@@ -33,6 +33,7 @@
       "product: contract or spot",
       "request_type: market, order, profile, linux setup, or maintenance",
       "auth_scope: public or private",
+      "trading_mode: live or demo for private futures workflows",
       "platform: macOS/Windows or Linux",
       "interaction_mode: GUI, terminal, or headless",
       "language: zh, en, or auto"
@@ -52,7 +53,8 @@
           "ticker",
           "poll-ticker"
         ],
-        "needs_profile_for_private": true
+        "needs_profile_for_private": true,
+        "trading_mode": "live by default; demo is supported only for official simulated futures sim.* endpoints"
       },
       "spot": {
         "entrypoint": "scripts/weex_spot_api.py",
@@ -132,6 +134,10 @@
         "scripts/weex_contract_api.py",
         "scripts/weex_profile_store.py"
       ],
+      "check simulated futures balance or positions": [
+        "scripts/weex_contract_api.py",
+        "references/contract-api-definitions.json"
+      ],
       "check spot balance": [
         "scripts/weex_spot_api.py",
         "scripts/weex_profile_store.py"
@@ -141,6 +147,11 @@
         "references/trade-data-schema.md"
       ],
       "scan current account risk": [
+        "scripts/weex_trade_guard.py",
+        "scripts/weex_trade_data_aggregator.py",
+        "references/trade-data-schema.md"
+      ],
+      "scan simulated-environment futures account risk": [
         "scripts/weex_trade_guard.py",
         "scripts/weex_trade_data_aggregator.py",
         "references/trade-data-schema.md"

@@ -117,6 +117,13 @@ python3 scripts/weex_contract_api.py list-endpoints --pretty
 python3 scripts/weex_spot_api.py list-endpoints --pretty
 ```
 
+List only the official simulated futures endpoints:
+
+```bash
+# Windows users: replace python3 with py -3
+python3 scripts/weex_contract_api.py list-endpoints --group sim --pretty
+```
+
 ## Trading Commands
 
 Representative futures order:
@@ -124,6 +131,35 @@ Representative futures order:
 ```bash
 # Windows users: replace python3 with py -3
 python3 scripts/weex_contract_api.py --profile main place-order --symbol ETHUSDT --side SELL --position-side SHORT --type LIMIT --quantity 0.001 --price 10000 --time-in-force GTC --confirm-live --pretty
+```
+
+Representative simulated futures order:
+
+```bash
+# Windows users: replace python3 with py -3
+python3 scripts/weex_contract_api.py --profile main place-order --symbol ETHUSDT --side SELL --position-side SHORT --type LIMIT --quantity 0.001 --price 10000 --time-in-force GTC --trading-mode demo --confirm-demo --pretty
+```
+
+The convenience wrapper accepts normal contract symbols such as `BTCUSDT` or `ETHUSDT` and maps them to the official simulated-order symbol shape before sending `sim.transaction.place_order`. Raw `call --endpoint sim.transaction.place_order` expects you to provide the exact official request body yourself.
+
+Simulated futures balance, position, and order-history reads use the `sim.*` endpoints and do not require a confirmation flag:
+
+```bash
+# Windows users: replace python3 with py -3
+python3 scripts/weex_contract_api.py --profile main call --endpoint sim.account.get_account_balance --trading-mode demo --pretty
+python3 scripts/weex_contract_api.py --profile main call --endpoint sim.account.get_all_positions --trading-mode demo --pretty
+python3 scripts/weex_contract_api.py --profile main call --endpoint sim.transaction.get_order_history --trading-mode demo --query '{"limit":50}' --pretty
+```
+
+For raw contract calls, `--profile is a global argument`; place it before `call`, then use `--endpoint <key>` for the official endpoint key. Some official query endpoints use POST and are therefore protected as mutating by the local guard even when the business action is a query; preview the request with `--dry-run` first, then pass the matching confirmation flag only when you intentionally want to send that POST request.
+
+For simulated futures order history, omit `symbol` unless you are using an officially accepted simulated symbol filter for that endpoint. Querying without `symbol` avoids normal-symbol filters such as `BTCUSDT` being rejected by the demo history API.
+
+Use `--dry-run` when you need to inspect the signed request without sending a mutating request:
+
+```bash
+# Windows users: replace python3 with py -3
+python3 scripts/weex_contract_api.py --profile main place-order --symbol BTCUSDT --side BUY --position-side LONG --type MARKET --quantity 0.001 --trading-mode demo --confirm-demo --dry-run --pretty
 ```
 
 Representative spot order:
@@ -139,6 +175,28 @@ Current convenience wrappers:
 - Futures: `ticker`, `poll-ticker`, `place-order`, `cancel-order`
 
 For broader spot or futures cancel/query/history flows, use the generic `call` command with the bundled endpoint catalogs.
+
+## Aggregation And Trade Guard
+
+Private normalized payloads accept `--trading-mode live|demo`. Demo mode is futures-only and uses the official `sim.*` balance, all-position, and historical-order endpoints. Missing simulated futures equivalents for fills, bills, open orders, conditional orders, and TP/SL state are reported through `partial=true` and `degraded_reasons`; the aggregator does not call live endpoints to fill those gaps.
+When WEEX simulated endpoints return symbols in the simulated-order shape, normalized payloads map them back to the normal contract symbol shape, for example `BTCUSDT`, so downstream analysis and monitor matching stay consistent.
+
+```bash
+# Windows users: replace python3 with py -3
+python3 scripts/weex_trade_data_aggregator.py collect-account-risk --profile main --market futures --trading-mode demo --symbol BTCUSDT --pretty
+python3 scripts/weex_trade_data_aggregator.py collect-order-risk --profile main --market futures --trading-mode demo --order-json '{"symbol":"BTCUSDT","side":"BUY","position_side":"LONG","order_type":"MARKET","quantity":"0.001"}' --pretty
+```
+
+`weex_trade_guard.py` binds `trading_mode`, `environment`, profile, market, order preview, and alerts into the pending intent risk signature. Preview first, then confirm with the matching environment flag from the latest preview output.
+Private account, order, cancel, TP/SL, and order-query outputs include `user_environment_prefix` whenever the command has environment context. Natural-language summaries must put that prefix on the first line before describing balances, positions, submitted orders, order status, or order history.
+
+```bash
+# Windows users: replace python3 with py -3
+python3 scripts/weex_trade_guard.py preview-order --profile main --market futures --trading-mode demo --order-json '{"symbol":"BTCUSDT","side":"BUY","position_side":"LONG","order_type":"MARKET","quantity":"0.001"}' --language en --pretty
+python3 scripts/weex_trade_guard.py confirm-order --trading-mode demo --intent-id <intent_id> --risk-signature <risk_signature> --confirm-demo --pretty
+```
+
+For live order confirmation, use `--trading-mode live --confirm-live`. A live intent cannot be confirmed with `--confirm-demo`, and a demo intent cannot be confirmed with `--confirm-live`.
 
 ## Regenerate Definitions
 

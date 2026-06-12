@@ -57,6 +57,177 @@ class ParsedDoc:
     weight_uid: Optional[int]
     request_params: List[Dict[str, str]]
     response_params: List[Dict[str, str]]
+    permission: Optional[str] = None
+
+
+CONTRACT_DEMO_SOURCE = "https://www.weex.com/api-doc/zh-CN/contract/intro"
+
+CONTRACT_DEMO_BALANCE_FIELDS = [
+    {"name": "asset", "type": "String", "description": "Asset name."},
+    {"name": "balance", "type": "String", "description": "Total balance."},
+    {"name": "availableBalance", "type": "String", "description": "Available balance."},
+    {"name": "frozen", "type": "String", "description": "Frozen amount."},
+    {"name": "unrealizePnl", "type": "String", "description": "Unrealized profit and loss."},
+]
+
+CONTRACT_DEMO_ORDER_REQUEST = [
+    {"name": "symbol", "type": "String", "required": "Yes", "description": "Trading pair, for example BTCSUSDT."},
+    {"name": "side", "type": "String", "required": "Yes", "description": "Order side. Supported values: BUY, SELL."},
+    {"name": "positionSide", "type": "String", "required": "Yes", "description": "Position side. Supported values: LONG, SHORT."},
+    {"name": "type", "type": "String", "required": "Yes", "description": "Order type. Demo order supports LIMIT and MARKET."},
+    {"name": "timeInForce", "type": "String", "required": "Conditional", "description": "Required when type = LIMIT. Supported values: GTC, IOC, FOK, POST_ONLY."},
+    {"name": "quantity", "type": "String", "required": "Yes", "description": "Order quantity. Must be greater than 0."},
+    {"name": "price", "type": "String", "required": "Conditional", "description": "Limit price. Required when type = LIMIT."},
+    {"name": "newClientOrderId", "type": "String", "required": "Yes", "description": "Client-defined order ID, 1-36 chars matching ^[.A-Z:/a-z0-9_-]{1,36}$."},
+    {"name": "tpTriggerPrice", "type": "String", "required": "No", "description": "Optional take-profit trigger price."},
+    {"name": "slTriggerPrice", "type": "String", "required": "No", "description": "Optional stop-loss trigger price."},
+    {"name": "TpWorkingType", "type": "String", "required": "No", "description": "Take-profit trigger price source. Preserve this official field casing."},
+    {"name": "SlWorkingType", "type": "String", "required": "No", "description": "Stop-loss trigger price source. Preserve this official field casing."},
+]
+
+CONTRACT_DEMO_ORDER_RESPONSE = [
+    {"name": "orderId", "type": "String", "description": "Order ID assigned by the system."},
+    {"name": "clientOrderId", "type": "String", "description": "Echo of newClientOrderId."},
+    {"name": "success", "type": "Boolean", "description": "Whether the order request was accepted."},
+    {"name": "errorCode", "type": "String", "description": "Error code when success = false; otherwise empty."},
+    {"name": "errorMessage", "type": "String", "description": "Error message when success = false; otherwise empty."},
+]
+
+CONTRACT_DEMO_POSITION_FIELDS = [
+    {"name": "id", "type": "Long", "description": "Position ID."},
+    {"name": "asset", "type": "String", "description": "Associated collateral asset."},
+    {"name": "symbol", "type": "String", "description": "Trading pair."},
+    {"name": "side", "type": "String", "description": "Position direction such as LONG or SHORT."},
+    {"name": "marginType", "type": "String", "description": "Margin mode: CROSSED or ISOLATED."},
+    {"name": "separatedMode", "type": "String", "description": "Position separation mode: COMBINED or SEPARATED."},
+    {"name": "separatedOpenOrderId", "type": "Long", "description": "Separated-position open order ID."},
+    {"name": "leverage", "type": "String", "description": "Position leverage."},
+    {"name": "size", "type": "String", "description": "Current position size."},
+    {"name": "openValue", "type": "String", "description": "Open position value."},
+    {"name": "openFee", "type": "String", "description": "Open fee."},
+    {"name": "fundingFee", "type": "String", "description": "Funding fee."},
+    {"name": "marginSize", "type": "String", "description": "Margin amount in the collateral asset."},
+    {"name": "isolatedMargin", "type": "String", "description": "Isolated margin amount."},
+    {"name": "isAutoAppendIsolatedMargin", "type": "Boolean", "description": "Whether automatic isolated-margin append is enabled."},
+    {"name": "cumOpenSize", "type": "String", "description": "Cumulative open size."},
+    {"name": "cumOpenValue", "type": "String", "description": "Cumulative open value."},
+    {"name": "cumOpenFee", "type": "String", "description": "Cumulative open fee."},
+    {"name": "cumCloseSize", "type": "String", "description": "Cumulative close size."},
+    {"name": "cumCloseValue", "type": "String", "description": "Cumulative close value."},
+    {"name": "cumCloseFee", "type": "String", "description": "Cumulative close fee."},
+    {"name": "cumFundingFee", "type": "String", "description": "Cumulative settled funding fee."},
+    {"name": "cumLiquidateFee", "type": "String", "description": "Cumulative liquidation fee."},
+    {"name": "createdMatchSequenceId", "type": "Long", "description": "Match engine sequence ID at creation."},
+    {"name": "updatedMatchSequenceId", "type": "Long", "description": "Latest match engine sequence ID."},
+    {"name": "createdTime", "type": "Long", "description": "Creation time in Unix milliseconds."},
+    {"name": "updatedTime", "type": "Long", "description": "Update time in Unix milliseconds."},
+    {"name": "unrealizePnl", "type": "String", "description": "Unrealized profit and loss."},
+    {"name": "liquidatePrice", "type": "String", "description": "Estimated liquidation price; 0 means no current liquidation risk."},
+]
+
+CONTRACT_DEMO_HISTORY_REQUEST = [
+    {
+        "name": "symbol",
+        "type": "String",
+        "required": "No",
+        "description": (
+            "Optional trading pair filter. Omit by default for demo history because normal "
+            "contract symbols such as BTCUSDT may be rejected unless the API accepts the "
+            "exact simulated symbol filter."
+        ),
+    },
+    {"name": "limit", "type": "Integer", "required": "No", "description": "Number of records per page, 1-1000. Default 500."},
+    {"name": "startTime", "type": "Long", "required": "No", "description": "Start time in Unix milliseconds. Must be less than or equal to endTime."},
+    {"name": "endTime", "type": "Long", "required": "No", "description": "End time in Unix milliseconds. Must be within 90 days of startTime."},
+    {"name": "page", "type": "Integer", "required": "No", "description": "Page index starting from 0. Default 0."},
+]
+
+CONTRACT_DEMO_HISTORY_RESPONSE = [
+    {"name": "avgPrice", "type": "String", "description": "Average fill price."},
+    {"name": "clientOrderId", "type": "String", "description": "Client-defined order ID."},
+    {"name": "cumQuote", "type": "String", "description": "Cumulative filled amount in the quote asset."},
+    {"name": "executedQty", "type": "String", "description": "Filled quantity in the base asset."},
+    {"name": "orderId", "type": "Long", "description": "System order ID."},
+    {"name": "origQty", "type": "String", "description": "Original order quantity."},
+    {"name": "price", "type": "String", "description": "Order price."},
+    {"name": "reduceOnly", "type": "Boolean", "description": "Whether the order is reduce-only."},
+    {"name": "side", "type": "String", "description": "Order side."},
+    {"name": "positionSide", "type": "String", "description": "Position side."},
+    {"name": "status", "type": "String", "description": "Order status."},
+    {"name": "stopPrice", "type": "String", "description": "Trigger or stop price when applicable."},
+    {"name": "symbol", "type": "String", "description": "Trading pair."},
+    {"name": "time", "type": "Long", "description": "Order time in Unix milliseconds."},
+    {"name": "timeInForce", "type": "String", "description": "Time-in-force policy."},
+    {"name": "type", "type": "String", "description": "Order type."},
+    {"name": "updateTime", "type": "Long", "description": "Last update time in Unix milliseconds."},
+    {"name": "workingType", "type": "String", "description": "Trigger price source."},
+]
+
+CONTRACT_DEMO_ENDPOINTS = (
+    {
+        "key": "sim.account.get_account_balance",
+        "title": "Get Demo Account Balance (USER_DATA)",
+        "method": "GET",
+        "path": "/capi/v3/sim/balance",
+        "permission": "USER_DATA",
+        "weight_ip": 5,
+        "weight_uid": 10,
+        "response_params": CONTRACT_DEMO_BALANCE_FIELDS,
+    },
+    {
+        "key": "sim.account.get_all_positions",
+        "title": "Get Demo All Positions (USER_DATA)",
+        "method": "GET",
+        "path": "/capi/v3/sim/position/allPosition",
+        "permission": "USER_DATA",
+        "weight_ip": 10,
+        "weight_uid": 15,
+        "response_params": CONTRACT_DEMO_POSITION_FIELDS,
+    },
+    {
+        "key": "sim.transaction.get_order_history",
+        "title": "Get Demo Order History (USER_DATA)",
+        "method": "GET",
+        "path": "/capi/v3/sim/order/history",
+        "permission": "USER_DATA",
+        "weight_ip": 10,
+        "weight_uid": 10,
+        "request_params": CONTRACT_DEMO_HISTORY_REQUEST,
+        "response_params": CONTRACT_DEMO_HISTORY_RESPONSE,
+    },
+    {
+        "key": "sim.transaction.place_order",
+        "title": "Place Demo Order (TRADE)",
+        "method": "POST",
+        "path": "/capi/v3/sim/order",
+        "permission": "TRADE",
+        "weight_ip": 2,
+        "weight_uid": 5,
+        "request_params": CONTRACT_DEMO_ORDER_REQUEST,
+        "response_params": CONTRACT_DEMO_ORDER_RESPONSE,
+    },
+)
+
+
+def build_contract_demo_docs() -> List[ParsedDoc]:
+    return [
+        ParsedDoc(
+            product="contract",
+            key=definition["key"],
+            title=definition["title"],
+            category="sim",
+            method=definition["method"],
+            path=definition["path"],
+            doc_url=CONTRACT_DEMO_SOURCE,
+            requires_auth=True,
+            weight_ip=definition["weight_ip"],
+            weight_uid=definition["weight_uid"],
+            request_params=definition.get("request_params", []),
+            response_params=definition["response_params"],
+            permission=definition["permission"],
+        )
+        for definition in CONTRACT_DEMO_ENDPOINTS
+    ]
 
 
 def fetch_text(url: str) -> str:
@@ -400,6 +571,8 @@ def docs_to_json(product: str, docs: List[ParsedDoc]) -> Dict[str, Any]:
             "request_params": doc.request_params,
             "response_params": doc.response_params,
         }
+        if doc.permission is not None:
+            row["permission"] = doc.permission
         if doc.weight_ip is not None:
             row["weight_ip"] = doc.weight_ip
         if doc.weight_uid is not None:
@@ -413,28 +586,76 @@ def docs_to_json(product: str, docs: List[ParsedDoc]) -> Dict[str, Any]:
     }
 
 
+def endpoint_key_prefix(product: str, category: str) -> str:
+    if product == "spot":
+        return f"spot.{category}"
+    return category
+
+
+def endpoint_group_heading(product: str, category: str) -> str:
+    category_title = category.replace("_", " ").title()
+    if product == "spot":
+        return f"Spot {category_title} Endpoint Sections"
+    return f"{category_title} Endpoint Sections"
+
+
+def ordered_categories(docs: List[ParsedDoc]) -> List[str]:
+    seen = set()
+    categories = []
+    for doc in docs:
+        if doc.category in seen:
+            continue
+        seen.add(doc.category)
+        categories.append(doc.category)
+    return categories
+
+
 def render_md(product: str, docs: List[ParsedDoc], generated_at: str) -> str:
+    categories = ordered_categories(docs)
     lines = [
         f"# WEEX {product.capitalize()} API Definitions",
         "",
         f"Generated from live V3 docs on {generated_at}.",
-        "",
-        "## Contents",
-        "",
-        "- Summary table",
-        f"- `{product}.*` endpoint sections",
-        "",
-        "## Summary Table",
-        "",
-        f"Total endpoints: **{len(docs)}**",
-        "",
-        "| Key | Method | Path | Auth |",
-        "|---|---|---|---|",
     ]
+    if product == "contract" and any(doc.key.startswith("sim.") for doc in docs):
+        lines.extend(
+            [
+                "",
+                "Contract simulated futures endpoints are maintained in this generated catalog from the official WEEX contract demo API docs.",
+                "Demo is not a local dry-run; demo mutating endpoints send requests to WEEX futures demo mode.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Contents",
+            "",
+            "- Summary table",
+        ]
+    )
+    for category in categories:
+        lines.append(f"- `{endpoint_key_prefix(product, category)}.*` endpoint sections")
+    lines.extend(
+        [
+            "",
+            "Use in-page search with the exact endpoint key from the summary table to jump to a specific generated section quickly.",
+            "",
+            "## Summary Table",
+            "",
+            f"Total endpoints: **{len(docs)}**",
+            "",
+            "| Key | Method | Path | Auth |",
+            "|---|---|---|---|",
+        ]
+    )
     for doc in docs:
         lines.append(f"| `{doc.key}` | `{doc.method}` | `{doc.path}` | `{doc.requires_auth}` |")
 
+    current_category = None
     for doc in docs:
+        if doc.category != current_category:
+            current_category = doc.category
+            lines.extend(["", f"## {endpoint_group_heading(product, doc.category)}"])
         lines.extend(
             [
                 "",
@@ -446,6 +667,8 @@ def render_md(product: str, docs: List[ParsedDoc], generated_at: str) -> str:
                 f"- Requires Auth: `{doc.requires_auth}`",
             ]
         )
+        if doc.permission is not None:
+            lines.append(f"- Permission: `{doc.permission}`")
         if doc.weight_ip is not None or doc.weight_uid is not None:
             lines.append(f"- Weight(IP/UID): `{doc.weight_ip or '-'} / {doc.weight_uid or '-'}`")
         lines.append(f"- Source: {doc.doc_url}")
@@ -481,7 +704,6 @@ def render_md(product: str, docs: List[ParsedDoc], generated_at: str) -> str:
                 )
         else:
             lines.append("NONE")
-    lines.append("")
     return "\n".join(lines)
 
 
@@ -512,6 +734,9 @@ def main() -> int:
         urls = iter_doc_urls(product, sitemap_urls)
         docs = collect_docs(product, urls)
         apply_known_overrides(product, docs)
+        if product == "contract":
+            docs.extend(build_contract_demo_docs())
+            docs.sort(key=lambda item: (item.category, item.key))
         write_outputs(product, docs)
         print(f"{product}: generated {len(docs)} endpoints")
     return 0

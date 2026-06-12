@@ -3,22 +3,22 @@
   "purpose": "File-level guide for the WEEX monitor skill.",
   "file_guide": {
     "scripts/weex_monitor_cli.py": {
-      "role": "Primary deterministic monitor CLI for PnL task normalization, monitor confirmation text/token binding, live position confirmation, multi-runtime agent status reporting metadata, SQLite local persistence, append-only events, confirmed-task lookup, live position revalidation, PnL trigger evaluation, dry-run checks, live loop execution, delegated live PnL close execution, failure review state, and execution claim locking.",
+      "role": "Primary deterministic monitor CLI for PnL task normalization, trading-mode-bound monitor confirmation text/token binding, live or demo position confirmation, multi-runtime agent status reporting metadata, SQLite local persistence, append-only events, confirmed-task lookup, position revalidation, PnL trigger evaluation, dry-run checks, account loop execution, delegated live or demo PnL close execution, failure review state, and execution claim locking.",
       "when": [
         "creating or previewing a monitor DSL",
         "rendering confirmation text and a confirmation token before activation",
-        "rendering live-position confirmation text before combined create-and-start activation",
+        "rendering live or demo position confirmation text before combined create-and-start activation",
         "saving an active monitor task after explicit monitor confirmation and matching confirmation token",
         "evaluating a PnL monitor from normalized position snapshots",
         "listing or cancelling local monitor tasks",
         "reviewing local monitor events",
         "running a dry-run trigger pass against mock positions",
         "running a bounded dry-run loop against mock position sequences",
-        "running a confirmed live loop for active PnL monitors",
-        "activating and running a bounded PnL live loop from one combined confirmation",
-        "building a non-mutating live delegate summary for weex-trader-skill",
-        "running a confirmed-token-validated live PnL check that delegates market close to weex-trader-skill",
-        "recording delegated live failures as review_required"
+        "running a confirmed live or demo loop for active PnL monitors",
+        "activating and running a bounded PnL account loop from one combined confirmation",
+        "building a non-mutating live or demo delegate summary for weex-trader-skill",
+        "running a confirmed-token-validated PnL check that delegates market close to weex-trader-skill",
+        "recording delegated execution failures as review_required"
       ],
       "surface": [
         "preview",

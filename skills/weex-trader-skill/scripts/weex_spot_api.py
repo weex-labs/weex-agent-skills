@@ -22,6 +22,7 @@ from typing import Any, Dict, Optional
 from urllib import error, parse, request
 
 from weex_agent_state import RuntimePreflightError, ensure_private_runtime_ready, refresh_agent_records
+from weex_profile_language import resolve_language
 from weex_url_policy import BaseUrlPolicyError, open_weex_request, validate_weex_base_url
 
 ProfileError = RuntimeError
@@ -294,6 +295,28 @@ def is_mutating(endpoint: Endpoint) -> bool:
     return endpoint.method in {"POST", "PUT", "DELETE"} and endpoint.requires_auth
 
 
+def private_environment() -> Dict[str, Any]:
+    return {
+        "trading_mode": "live",
+        "label": "live",
+        "market": "spot",
+        "uses_real_funds": True,
+        "notice": "This operation targets real WEEX spot trading.",
+    }
+
+
+def user_environment_prefix(environment: Dict[str, Any], language: Optional[str] = None) -> str:
+    resolved_language = resolve_language(language)
+    if resolved_language == "zh":
+        return "当前交易环境：真实盘"
+    return "Current trading mode: real trading"
+
+
+def add_environment_context(payload: Dict[str, Any], environment: Dict[str, Any]) -> None:
+    payload["environment"] = environment
+    payload["user_environment_prefix"] = user_environment_prefix(environment)
+
+
 def execute_endpoint(
     client: WeexSpotClient,
     endpoint_key: str,
@@ -304,6 +327,7 @@ def execute_endpoint(
     pretty: bool,
 ) -> int:
     endpoint = ENDPOINTS[endpoint_key]
+    environment = private_environment() if endpoint.requires_auth else None
 
     if is_mutating(endpoint) and not confirm_live and not dry_run:
         raise SystemExit(
@@ -323,6 +347,8 @@ def execute_endpoint(
             "query": query,
             "body": body,
         }
+        if environment is not None:
+            add_environment_context(preview, environment)
         output_json(preview, pretty)
         return 0
 
@@ -335,6 +361,8 @@ def execute_endpoint(
         "ok": resp.get("ok"),
         "result": resp.get("data") if resp.get("ok") else resp.get("error"),
     }
+    if environment is not None:
+        add_environment_context(payload, environment)
     output_json(payload, pretty)
     return 0 if resp.get("ok") else 1
 

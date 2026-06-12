@@ -8,6 +8,7 @@
 !/LICENSE
 !/README.md
 !/README.zh-CN.md
+!/test_all_skills.py
 
 # Keep tracked catalog structures and their contents.
 !/.agents/

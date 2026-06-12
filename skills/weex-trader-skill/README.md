@@ -7,6 +7,7 @@ It supports:
 - public market data
 - private account and position queries
 - spot and futures order placement
+- official WEEX futures demo-mode queries and demo futures order placement with explicit `--trading-mode demo`
 - normalized replay, profile, order-risk, and account-risk payload collection for downstream read-only analysis
 - preview-before-submit order risk checks with a pending confirmation intent
 - current account-risk scans without order parameters
@@ -21,7 +22,7 @@ It supports:
 - How to use this skill in Codex / Openclaw / Claude Code
 - Module quick-reference
 - Companion skill boundary
-- Recommended live order flow
+- Recommended order flow
 - Saved profile setup
 - Security notes
 - Troubleshooting
@@ -89,9 +90,11 @@ Mention `$weex-trader-skill`, then describe the task in plain language.
 |---|---|
 | Check market price | `"What's the latest BTCUSDT spot price?"` |
 | Review account or positions | `"Show me my current futures positions and available balance."` |
+| Review demo futures | `"Show my WEEX demo futures balance and positions."` |
 | Replay recent futures trading | `"Replay my last 30 days of BTCUSDT futures trades and summarize the biggest mistakes."` |
 | Generate a trading profile | `"Build a trading profile from my recent futures history."` |
 | Preview order risk before submit | `"Preview the risk on this BTCUSDT long before placing it."` |
+| Preview demo futures order | `"Preview this BTCUSDT demo futures long before placing it in demo trading."` |
 | Ask for current account risk | `"What are my main futures account risks right now?"` |
 | Place a spot market order | `"Buy 200 USDT worth of BTC at market."` |
 | Place a futures limit order | `"Open a small ETHUSDT short with a limit order at 2500."` |
@@ -103,9 +106,9 @@ Mention `$weex-trader-skill`, then describe the task in plain language.
 | Module | What it covers | Auth |
 |---|---|---|
 | `Spot` | Spot market data, balances, orders, trade history, and related endpoints. | Public + private |
-| `Futures` | Futures market data, account state, orders, positions, and leverage/margin endpoints. | Public + private |
-| `Aggregation` | Replay, profile, order-risk, and account-risk payload collection for downstream analysis. | Public + private |
-| `Trade Guard` | Preview-before-submit order risk, account-risk scan, pending confirmation intent handling, and trader-local risk review for standalone installs. | Private |
+| `Futures` | Futures market data, account state, orders, positions, leverage/margin endpoints, and the official `sim.*` simulated futures endpoints. | Public + private |
+| `Aggregation` | Replay, profile, order-risk, and account-risk payload collection for downstream analysis, with `trading_mode` and `environment` in private payloads. | Public + private |
+| `Trade Guard` | Preview-before-submit order risk, account-risk scan, pending confirmation intent handling, environment-bound confirmation, and trader-local risk review for standalone installs. | Private |
 
 If you need the underlying Python/runtime setup, shell command context, or direct CLI examples, open [Script operations](references/script-operations.md).
 
@@ -116,17 +119,27 @@ This skill may collect normalized replay, profile, order-risk, and account-risk 
 If the user wants interpretation of those payloads rather than data collection or live trading actions, hand the normalized JSON to `weex-analysis-skill`.
 Keep the detailed analysis workflow, analysis commands, and result semantics in the analysis skill documentation instead of duplicating them here.
 
-## Recommended Live Order Flow
+## Recommended Order Flow
 
-Use this safety order for live trading tasks:
+Use this safety order for trading tasks:
 
 - run `skill.preflight` first so profile, runtime, env, and GUI-routing facts are fresh before private actions
 - use a saved profile for private REST access instead of pasting credentials into ad hoc commands
+- choose the trading mode explicitly for account queries and direct non-preview actions: `live` maps to `真实盘` in Chinese and `real trading` in English; `demo` maps to `模拟盘` in Chinese and `demo trading` in English
+- keep `live` and `demo` as internal command values only; when speaking to the user, use localized trading-mode labels such as `模拟盘` and `真实盘` in Chinese or `demo trading` and `real trading` in English, not environment labels, not account labels, and not raw `live` or `demo`
+- for natural-language private account queries and direct non-preview actions, if the user did not clearly choose `模拟盘` or `真实盘` in Chinese, or `demo trading` or `real trading` in English, ask them to choose before calling private commands
+- for natural-language order previews where a saved profile and order details are present but trading mode is missing, do not ask a standalone trading-mode question. Generate the preview with the most likely initial preview mode: explicit wording wins first; profile names or notes can only be weak preview-default signals; if no useful signal exists, use `live` because the default flow is direct live execution. This is a preview-only default, and the same saved profile can target either trading mode
+- for every natural-language summary that uses private WEEX data or mentions a private order action, start with `user_environment_prefix` when it is returned. This includes account balances, positions, account risk, order previews, submitted order results, order cancel results, TP/SL order results, open-order queries, order status queries, and order-history queries. If a private command returns `environment` but not `user_environment_prefix`, derive the first line from that environment before summarizing anything else
+- keep the environment prefix as the first user-visible line, using localized labels such as `模拟盘` or `Current trading mode: real trading`. This prefix is informational and does not ask for order confirmation
 - preview the order risk first and review the returned alerts plus `user_confirmation`
-- in natural-language flows, ask the user to reply with exactly `user_confirmation.reply_text`; this value is intentionally simple and localized — a single word in the user's language, such as `confirm` for English. Do not ask them to copy `intent_id`, `risk_signature`, or longer phrases such as "confirm order"
+- in natural-language order preview flows, show `user_confirmation.reply_instruction` as the confirmation block. The confirmation block must put the mode and funds warning first, then the risk preview status, order summary, highest-priority warning, exact confirmation reply, and include the switch prompt from `user_confirmation.switch_reply_text` when present
+- ask the user to reply with exactly `user_confirmation.reply_text` when they want to execute; this value is intentionally simple and localized — a single word in the user's language, such as `confirm` for English. Do not ask them to copy `intent_id`, `risk_signature`, or longer phrases such as "confirm order"
 - keep `intent_id` and `risk_signature` internal for the execution step
-- confirm only with the latest preview output plus `--confirm-live`; stale or mismatched confirmation tokens must be regenerated
+- confirm only with the latest preview output and the matching trading-mode flag: `--confirm-live` for `trading_mode=live`, or `--trading-mode demo --confirm-demo` for demo futures
 - use account-risk scan when the user wants current exposure review without an order payload
+
+For demo futures, the skill uses only the official WEEX contract demo endpoints listed as `sim.*` in [Contract API definitions](references/contract-api-definitions.md). Demo order submission is not a local dry-run; it sends a mutating request to WEEX futures demo mode. First-phase demo support covers balance, all positions, historical orders, and order placement. Missing demo-only equivalents for fills, bills, open orders, conditional orders, and TP/SL state are reported as degraded data instead of falling back to live endpoints.
+Convenience order and guard flows accept normal contract symbols such as `BTCUSDT` and map them to the official demo-order symbol shape required by WEEX before submission. Normalized payloads map demo futures rows back to the normal symbol shape so analysis and monitor tasks can match `BTCUSDT` consistently.
 
 ## Saved Profile Setup
 
@@ -154,7 +167,8 @@ If an AI or automation host launches the GUI, prefer `scripts/weex_gui_launcher.
 - temporary password files and secret JSON files can leak through backups, sync folders, editors' recent-file lists, and filesystem forensics. Delete them immediately and keep them outside the repo.
 - `profiles.meta.json` is not the encrypted vault. It can still reveal account names, descriptions, default-profile choices, and custom base URLs.
 - `manual_once` is the supported Linux vault mode. Lock it again after sensitive work when appropriate.
-- `--confirm-live` sends real order or cancel requests to the real account. Start with least-privilege keys and a small or non-critical account whenever possible.
+- `--confirm-live` sends real order or cancel requests to real trading. Start with least-privilege keys and a small or non-critical account whenever possible.
+- `--trading-mode demo --confirm-demo` sends demo futures orders to WEEX futures demo mode; it is not a local dry-run.
 - `preview-order` returns localized `user_confirmation.reply_text` for the human reply, while `intent_id` plus `risk_signature` remain internal execution-binding values.
 - `confirm-order` expects the `intent_id` and `risk_signature` returned by `preview-order`; if either is missing or mismatched, regenerate the preview instead of forcing the old confirmation through.
 

@@ -147,6 +147,73 @@ class ReplayCollectionTests(unittest.TestCase):
         self.assertEqual(result["price_series"][0]["close"], 65000.0)
         self.assertEqual(result["price_series"][0]["symbol"], "BTCUSDT")
 
+    def test_collect_replay_payload_marks_demo_futures_as_partial_without_live_fallback(self) -> None:
+        fetcher = mock.Mock()
+        fetcher.fetch_futures_balance.return_value = {
+            "asset": "USDT",
+            "balance": "1000",
+            "availableBalance": "900",
+        }
+        fetcher.fetch_futures_positions.return_value = [
+            {
+                "symbol": "BTCSUSDT",
+                "side": "LONG",
+                "size": "0.01",
+                "openValue": "650",
+                "unrealizePnl": "12",
+            }
+        ]
+        fetcher.fetch_futures_orders.return_value = [
+            {
+                "symbol": "BTCSUSDT",
+                "orderId": "demo-order-1",
+                "clientOrderId": "demo-client-1",
+                "side": "BUY",
+                "positionSide": "LONG",
+                "type": "MARKET",
+                "status": "FILLED",
+                "origQty": "0.01",
+                "executedQty": "0.01",
+                "time": 1710000000000,
+            }
+        ]
+        fetcher.fetch_futures_klines.return_value = []
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        with mock.patch.object(aggregator, "resolve_language", return_value="zh"):
+            result = trade_aggregator.collect_replay_payload(
+                profile_name="demo",
+                market="futures",
+                trading_mode="demo",
+                period="7d",
+                symbol="BTCUSDT",
+            )
+
+        self.assertEqual(result["trading_mode"], "demo")
+        self.assertEqual(result["environment"]["trading_mode"], "demo")
+        self.assertEqual(result["user_environment_prefix"], "当前交易环境：模拟盘")
+        self.assertEqual(
+            result["environment"]["notice"],
+            "This operation targets WEEX futures demo mode.",
+        )
+        self.assertNotIn("account environment", result["environment"]["notice"])
+        self.assertEqual(result["balances"][0]["account_scope"], "sim_futures")
+        self.assertEqual(result["positions"][0]["account_scope"], "sim_futures")
+        self.assertEqual(result["positions"][0]["symbol"], "BTCUSDT")
+        self.assertEqual(result["orders"][0]["account_scope"], "sim_futures")
+        self.assertEqual(result["orders"][0]["symbol"], "BTCUSDT")
+        self.assertTrue(result["partial"])
+        self.assertIn("demo_futures_fills_unavailable", result["degraded_reasons"])
+        self.assertIn("demo_futures_bills_unavailable", result["degraded_reasons"])
+        self.assertIn("demo_futures_conditional_orders_unavailable", result["degraded_reasons"])
+        fetcher.fetch_futures_balance.assert_called_once_with(profile_name="demo", trading_mode="demo")
+        fetcher.fetch_futures_positions.assert_called_once_with(profile_name="demo", trading_mode="demo")
+        fetcher.fetch_futures_orders.assert_called_once()
+        self.assertEqual(fetcher.fetch_futures_orders.call_args.kwargs["trading_mode"], "demo")
+        fetcher.fetch_futures_fills.assert_not_called()
+        fetcher.fetch_futures_bills.assert_not_called()
+        fetcher.fetch_futures_historical_pending_orders.assert_not_called()
+
     def test_collect_replay_payload_includes_futures_historical_pending_orders_for_discipline_review(self) -> None:
         fetcher = mock.Mock()
         fetcher.fetch_futures_balance.return_value = []
@@ -1501,6 +1568,112 @@ class AggregatorCliTests(unittest.TestCase):
         self.assertIn('"account_snapshot"', stream.getvalue())
         self.assertIn('"market": "futures"', stream.getvalue())
 
+    def test_cmd_collect_account_risk_accepts_language_for_environment_prefix(self) -> None:
+        args = aggregator.build_parser().parse_args(
+            [
+                "collect-account-risk",
+                "--profile",
+                "demo",
+                "--market",
+                "futures",
+                "--trading-mode",
+                "demo",
+                "--symbol",
+                "BTCUSDT",
+                "--language",
+                "zh",
+            ]
+        )
+        aggregator_instance = mock.Mock()
+        aggregator_instance.collect_account_risk_payload.return_value = {"ok": True}
+
+        with mock.patch.object(aggregator, "TradeDataAggregator", return_value=aggregator_instance):
+            stream = io.StringIO()
+            with mock.patch.object(sys, "stdout", stream):
+                exit_code = aggregator.cmd_collect_account_risk(args)
+
+        self.assertEqual(exit_code, 0)
+        aggregator_instance.collect_account_risk_payload.assert_called_once_with(
+            profile_name="demo",
+            market="futures",
+            trading_mode="demo",
+            symbol="BTCUSDT",
+            language="zh",
+        )
+
+    def test_collect_account_risk_demo_futures_uses_demo_scope_and_degraded_state(self) -> None:
+        fetcher = mock.Mock()
+        fetcher.fetch_futures_balance.return_value = {
+            "asset": "USDT",
+            "balance": "1000",
+            "availableBalance": "900",
+        }
+        fetcher.fetch_futures_positions.return_value = [
+            {
+                "symbol": "BTCSUSDT",
+                "side": "LONG",
+                "size": "0.01",
+                "openValue": "650",
+                "unrealizePnl": "12",
+            }
+        ]
+        fetcher.fetch_futures_orders.return_value = []
+        fetcher.fetch_futures_latest_price.return_value = {"symbol": "BTCSUSDT", "price": "65000"}
+        fetcher.fetch_futures_klines.return_value = []
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        with mock.patch.object(aggregator, "resolve_language", return_value="zh"):
+            result = trade_aggregator.collect_account_risk_payload(
+                profile_name="demo",
+                market="futures",
+                trading_mode="demo",
+                symbol="BTCUSDT",
+            )
+
+        self.assertEqual(result["trading_mode"], "demo")
+        self.assertEqual(result["environment"]["trading_mode"], "demo")
+        self.assertEqual(result["user_environment_prefix"], "当前交易环境：模拟盘")
+        self.assertEqual(
+            result["environment"]["notice"],
+            "This operation targets WEEX futures demo mode.",
+        )
+        self.assertNotIn("account environment", result["environment"]["notice"])
+        self.assertEqual(result["account_snapshot"]["account_scope"], "sim_futures")
+        self.assertEqual(result["positions"][0]["account_scope"], "sim_futures")
+        self.assertEqual(result["positions"][0]["symbol"], "BTCUSDT")
+        self.assertTrue(result["partial"])
+        self.assertIn("demo_futures_open_orders_unavailable", result["degraded_reasons"])
+        self.assertIn("demo_futures_conditional_orders_unavailable", result["degraded_reasons"])
+        fetcher.fetch_futures_balance.assert_called_once_with(profile_name="demo", trading_mode="demo")
+        fetcher.fetch_futures_positions.assert_called_once_with(profile_name="demo", trading_mode="demo")
+        self.assertEqual(fetcher.fetch_futures_orders.call_args.kwargs["trading_mode"], "demo")
+        fetcher.fetch_futures_open_orders.assert_not_called()
+        fetcher.fetch_futures_pending_orders.assert_not_called()
+
+    def test_collect_account_risk_explicit_language_controls_environment_prefix(self) -> None:
+        fetcher = mock.Mock()
+        fetcher.fetch_futures_balance.return_value = {
+            "asset": "USDT",
+            "balance": "1000",
+            "availableBalance": "900",
+        }
+        fetcher.fetch_futures_positions.return_value = []
+        fetcher.fetch_futures_orders.return_value = []
+        fetcher.fetch_futures_latest_price.return_value = {"symbol": "BTCUSDT", "price": "65000"}
+        fetcher.fetch_futures_klines.return_value = []
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        with mock.patch.object(aggregator, "resolve_language", side_effect=lambda value=None: value or "en"):
+            result = trade_aggregator.collect_account_risk_payload(
+                profile_name="demo",
+                market="futures",
+                trading_mode="demo",
+                symbol="BTCUSDT",
+                language="zh",
+            )
+
+        self.assertEqual(result["user_environment_prefix"], "当前交易环境：模拟盘")
+
     def test_main_returns_structured_json_when_aggregation_fails(self) -> None:
         aggregator_instance = mock.Mock()
         aggregator_instance.collect_account_risk_payload.side_effect = aggregator.AggregationInputError(
@@ -1539,6 +1712,45 @@ class ApiFetcherTests(unittest.TestCase):
                 "limit": 1000,
                 "page": 0,
             },
+        )
+
+    def test_fetch_futures_balance_uses_sim_endpoint_for_demo_mode(self) -> None:
+        fetcher = aggregator.WeexApiFetcher()
+
+        with mock.patch.object(fetcher, "_send_contract_request", return_value={"asset": "USDT"}) as send_mock:
+            payload = fetcher.fetch_futures_balance(profile_name="demo", trading_mode="demo")
+
+        self.assertEqual(payload, {"asset": "USDT"})
+        send_mock.assert_called_once_with(
+            profile_name="demo",
+            endpoint_key="sim.account.get_account_balance",
+            query={},
+            trading_mode="demo",
+        )
+
+    def test_fetch_futures_orders_uses_sim_history_for_demo_mode(self) -> None:
+        fetcher = aggregator.WeexApiFetcher()
+
+        with mock.patch.object(fetcher, "_send_contract_request", return_value=[]) as send_mock:
+            fetcher.fetch_futures_orders(
+                profile_name="demo",
+                trading_mode="demo",
+                start_ms=10,
+                end_ms=20,
+                symbol="BTCSUSDT",
+            )
+
+        send_mock.assert_called_once_with(
+            profile_name="demo",
+            endpoint_key="sim.transaction.get_order_history",
+            query={
+                "symbol": "BTCSUSDT",
+                "startTime": 10,
+                "endTime": 20,
+                "limit": 1000,
+                "page": 0,
+            },
+            trading_mode="demo",
         )
 
     def test_fetch_spot_balance_uses_spot_account_balance_endpoint(self) -> None:

@@ -152,10 +152,60 @@ def _status_context(payload: Any) -> dict[str, Any]:
     }
 
 
+def _payload_environment_context(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    environment = payload.get("environment")
+    if not isinstance(environment, dict):
+        environment = {}
+    trading_mode = payload.get("trading_mode") or environment.get("trading_mode")
+    account_scope = payload.get("account_scope")
+    language = payload.get("language") or payload.get("locale") or environment.get("language")
+    context: dict[str, Any] = {}
+    if trading_mode not in (None, ""):
+        context["trading_mode"] = str(trading_mode)
+    if environment:
+        context["environment"] = dict(environment)
+    if account_scope not in (None, ""):
+        context["account_scope"] = str(account_scope)
+    if language not in (None, ""):
+        context["language"] = str(language)
+    return context
+
+
+def _attach_payload_context(result: dict[str, Any], payload: Any) -> dict[str, Any]:
+    context = _payload_environment_context(payload)
+    if not context:
+        return result
+    updated = dict(result)
+    updated.update(context)
+    return updated
+
+
 def _attach_standard_disclaimer(result: dict[str, Any]) -> dict[str, Any]:
     updated = dict(result)
     updated["disclaimer"] = STANDARD_ANALYSIS_DISCLAIMER
     return updated
+
+
+def _result_language(result: dict[str, Any], environment: dict[str, Any]) -> str:
+    language = str(result.get("language") or environment.get("language") or "").strip().lower()
+    if language.startswith("zh"):
+        return "zh"
+    return "en"
+
+
+def _user_facing_trading_mode_label(environment: dict[str, Any], result: dict[str, Any]) -> str:
+    mode = str(environment.get("trading_mode") or result.get("trading_mode") or "").strip().lower()
+    if mode == "demo":
+        if _result_language(result, environment) == "zh":
+            return "模拟盘"
+        return "demo trading"
+    if mode == "live":
+        if _result_language(result, environment) == "zh":
+            return "真实盘"
+        return "real trading"
+    return mode or "unknown"
 
 
 def _append_standard_disclaimer(lines: list[str], disclaimer: Any) -> None:
@@ -165,6 +215,31 @@ def _append_standard_disclaimer(lines: list[str], disclaimer: Any) -> None:
     if lines and lines[-1] != "":
         lines.append("")
     lines.append(text)
+
+
+def _environment_text_lines(result: dict[str, Any]) -> list[str]:
+    environment = result.get("environment")
+    if not isinstance(environment, dict):
+        environment = {}
+    if not environment and result.get("trading_mode") in (None, ""):
+        return []
+    lines = [
+        f"Trading Mode: {_user_facing_trading_mode_label(environment, result)}",
+    ]
+    if environment.get("market") not in (None, ""):
+        lines.append(f"Market: {environment['market']}")
+    if "uses_real_funds" in environment:
+        lines.append(f"Uses Real Funds: {str(bool(environment['uses_real_funds'])).lower()}")
+    if environment.get("notice"):
+        lines.append(f"Trading Notice: {environment['notice']}")
+    return lines
+
+
+def _prepend_environment_text(lines: list[str], result: dict[str, Any]) -> None:
+    environment_lines = _environment_text_lines(result)
+    if not environment_lines:
+        return
+    lines[:0] = [*environment_lines, ""]
 
 
 def _concentration_alert_is_material(
@@ -377,6 +452,21 @@ def analyze_snapshot(payload: Any) -> dict[str, Any]:
 
         normalized_positions.append(position)
 
+    if normalized_positions:
+        if equity is None:
+            status_context["partial"] = True
+            _merge_reason_code(status_context["degraded_reasons"], "snapshot_missing_equity")
+        if available_balance is None:
+            status_context["partial"] = True
+            _merge_reason_code(status_context["degraded_reasons"], "snapshot_missing_available_balance")
+        for position in normalized_positions:
+            if position.get("mark_price") is None and position.get("notional") is None:
+                status_context["partial"] = True
+                _merge_reason_code(status_context["degraded_reasons"], "snapshot_position_missing_mark_price")
+            if position.get("leverage") is None:
+                status_context["partial"] = True
+                _merge_reason_code(status_context["degraded_reasons"], "snapshot_position_missing_leverage")
+
     gross_leverage_estimate = _ratio(gross_notional, equity)
     free_balance_ratio = _ratio(available_balance, equity)
 
@@ -452,7 +542,7 @@ def analyze_snapshot(payload: Any) -> dict[str, Any]:
                 f"Largest position: {largest_position['symbol']} ({round(float(share) * 100, 2)}% of gross)"
             )
 
-    return _attach_standard_disclaimer({
+    result = _attach_payload_context({
         "positions_count": len(normalized_positions),
         "equity": _decimal_to_float(equity),
         "available_balance": _decimal_to_float(available_balance),
@@ -467,7 +557,8 @@ def analyze_snapshot(payload: Any) -> dict[str, Any]:
         "risk_flags": risk_flags,
         "summary_lines": summary_lines,
         **status_context,
-    })
+    }, payload)
+    return _attach_standard_disclaimer(result)
 
 
 def normalize_fill(fill: dict[str, Any]) -> dict[str, Any]:
@@ -1154,7 +1245,14 @@ def analyze_fills(payload: Any) -> dict[str, Any]:
         quantity = _to_decimal(fill["quantity"]) or Decimal("0")
         notional = _to_decimal(fill["notional"]) or Decimal("0")
         pnl = _to_decimal(fill["realized_pnl"])
-        fee = _to_decimal(fill["fee"]) or Decimal("0")
+        fee_value = _to_decimal(fill["fee"])
+        if pnl is None:
+            status_context["partial"] = True
+            _merge_reason_code(status_context["degraded_reasons"], "fills_missing_realized_pnl")
+        if fee_value is None:
+            status_context["partial"] = True
+            _merge_reason_code(status_context["degraded_reasons"], "fills_missing_fee")
+        fee = fee_value or Decimal("0")
         side = str(fill["side"])
 
         turnover += abs(notional)
@@ -1183,7 +1281,7 @@ def analyze_fills(payload: Any) -> dict[str, Any]:
     if pnl_samples:
         summary_lines.append(f"Fill win rate: {round(float(win_rate or Decimal('0')) * 100, 2)}%")
 
-    return _attach_standard_disclaimer({
+    result = _attach_payload_context({
         "fills_count": len(fills),
         "symbols": sorted(symbols),
         "buy_volume": _decimal_to_float(buy_volume),
@@ -1196,7 +1294,8 @@ def analyze_fills(payload: Any) -> dict[str, Any]:
         "fills": fills,
         "summary_lines": summary_lines,
         **status_context,
-    })
+    }, payload)
+    return _attach_standard_disclaimer(result)
 
 
 def _windowed_event_count(timestamps: list[int], window_ms: int) -> int:
@@ -1418,22 +1517,25 @@ def analyze_replay(payload: Any) -> dict[str, Any]:
 
     summary = _summarize_replay_patterns(tags)
 
-    return _attach_standard_disclaimer({
-        "summary": summary,
-        "top_pattern": tags[0],
-        "behavior_tags": tags[:5],
-        "evidence": evidence[:5],
-        "advice": advice[:5],
-        "trade_episodes": episodes,
-        "episode_count": len(episodes),
-        "sample_quality": "full" if len(complete_episodes) >= 20 else "limited" if len(complete_episodes) >= 10 else "minimal",
-        "metrics": metrics,
-        "quant_reports": dict(metrics),
-        "closed_trade_count": int(payload.get("closed_trade_count") or len(complete_episodes)),
-        "partial": partial,
-        "degraded_reasons": degraded_reasons,
-        "constraints": constraints,
-    })
+    return _attach_payload_context(
+        _attach_standard_disclaimer({
+            "summary": summary,
+            "top_pattern": tags[0],
+            "behavior_tags": tags[:5],
+            "evidence": evidence[:5],
+            "advice": advice[:5],
+            "trade_episodes": episodes,
+            "episode_count": len(episodes),
+            "sample_quality": "full" if len(complete_episodes) >= 20 else "limited" if len(complete_episodes) >= 10 else "minimal",
+            "metrics": metrics,
+            "quant_reports": dict(metrics),
+            "closed_trade_count": int(payload.get("closed_trade_count") or len(complete_episodes)),
+            "partial": partial,
+            "degraded_reasons": degraded_reasons,
+            "constraints": constraints,
+        }),
+        payload,
+    )
 
 
 def _episode_target_with_status(episode: dict[str, Any]) -> str:
@@ -1514,20 +1616,23 @@ def review_trades(payload: Any) -> dict[str, Any]:
     }
     episodes = list(replay_result.get("trade_episodes") or [])
 
-    return _attach_standard_disclaimer({
-        "review_type": "trade_review",
-        "summary": replay_result.get("summary"),
-        "episode_count": replay_result.get("episode_count", 0),
-        "closed_trade_count": replay_result.get("closed_trade_count", 0),
-        "sample_quality": replay_result.get("sample_quality"),
-        "episode_highlights": _build_episode_highlights(episodes),
-        "episodes": episodes,
-        "metrics": dict(replay_result.get("metrics") or {}),
-        "pattern_snapshot": pattern_snapshot,
-        "partial": bool(replay_result.get("partial")),
-        "degraded_reasons": list(replay_result.get("degraded_reasons") or []),
-        "constraints": list(replay_result.get("constraints") or []),
-    })
+    return _attach_payload_context(
+        _attach_standard_disclaimer({
+            "review_type": "trade_review",
+            "summary": replay_result.get("summary"),
+            "episode_count": replay_result.get("episode_count", 0),
+            "closed_trade_count": replay_result.get("closed_trade_count", 0),
+            "sample_quality": replay_result.get("sample_quality"),
+            "episode_highlights": _build_episode_highlights(episodes),
+            "episodes": episodes,
+            "metrics": dict(replay_result.get("metrics") or {}),
+            "pattern_snapshot": pattern_snapshot,
+            "partial": bool(replay_result.get("partial")),
+            "degraded_reasons": list(replay_result.get("degraded_reasons") or []),
+            "constraints": list(replay_result.get("constraints") or []),
+        }),
+        payload,
+    )
 
 
 def analyze_profile(payload: Any) -> dict[str, Any]:
@@ -1610,7 +1715,7 @@ def analyze_profile(payload: Any) -> dict[str, Any]:
             "Sample size is still too small for a stable persona classification.",
             "Use the current metrics as directional observations instead of a firm trading profile.",
         ]
-        return _attach_standard_disclaimer({
+        result = _attach_payload_context({
             "selected_period": selected_period,
             "sample_quality": sample_quality,
             "profile_tier": "basic",
@@ -1621,9 +1726,10 @@ def analyze_profile(payload: Any) -> dict[str, Any]:
             "partial": partial,
             "degraded_reasons": degraded_reasons,
             "constraints": constraints,
-        })
+        }, payload)
+        return _attach_standard_disclaimer(result)
 
-    return _attach_standard_disclaimer({
+    result = _attach_payload_context({
         "selected_period": selected_period,
         "sample_quality": sample_quality,
         "profile_tier": "full" if sample_quality == "full" and not partial else "weak",
@@ -1640,7 +1746,8 @@ def analyze_profile(payload: Any) -> dict[str, Any]:
         "partial": partial,
         "degraded_reasons": degraded_reasons,
         "constraints": constraints,
-    })
+    }, payload)
+    return _attach_standard_disclaimer(result)
 
 
 def _derive_profile_metrics_from_replay_payload(
@@ -1950,11 +2057,17 @@ def _entry_order_notional(
 
 
 def analyze_order_risk(payload: Any) -> dict[str, Any]:
-    return _attach_standard_disclaimer(risk_review_core.analyze_order_risk(payload))
+    return _attach_payload_context(
+        _attach_standard_disclaimer(risk_review_core.analyze_order_risk(payload)),
+        payload,
+    )
 
 
 def analyze_account_risk(payload: Any) -> dict[str, Any]:
-    return _attach_standard_disclaimer(risk_review_core.analyze_account_risk(payload))
+    return _attach_payload_context(
+        _attach_standard_disclaimer(risk_review_core.analyze_account_risk(payload)),
+        payload,
+    )
 
 
 def _append_status_sections(
@@ -2093,6 +2206,7 @@ def _render_text(result: dict[str, Any]) -> str:
             degraded_reasons=degraded_reasons,
             constraints=constraints,
         )
+        _prepend_environment_text(lines, result)
         _append_standard_disclaimer(lines, disclaimer)
         return "\n".join(lines)
 
@@ -2134,6 +2248,7 @@ def _render_text(result: dict[str, Any]) -> str:
             degraded_reasons=degraded_reasons,
             constraints=constraints,
         )
+        _prepend_environment_text(lines, result)
         _append_standard_disclaimer(lines, disclaimer)
         return "\n".join(lines)
 
@@ -2219,6 +2334,7 @@ def _render_text(result: dict[str, Any]) -> str:
             degraded_reasons=degraded_reasons,
             constraints=constraints,
         )
+        _prepend_environment_text(lines, result)
         _append_standard_disclaimer(lines, disclaimer)
         return "\n".join(lines)
 
@@ -2251,6 +2367,7 @@ def _render_text(result: dict[str, Any]) -> str:
         degraded_reasons=degraded_reasons,
         constraints=constraints,
     )
+    _prepend_environment_text(lines, result)
     _append_standard_disclaimer(lines, disclaimer)
     return "\n".join(lines)
 
@@ -2295,7 +2412,7 @@ def main(argv: list[str] | None = None) -> int:
         result = analyze_order_risk(payload)
     else:
         result = analyze_account_risk(payload)
-    result = _attach_standard_disclaimer(result)
+    result = _attach_payload_context(_attach_standard_disclaimer(result), payload)
 
     if args.format == "text":
         print(_render_text(result))

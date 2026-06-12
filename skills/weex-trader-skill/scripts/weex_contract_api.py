@@ -22,6 +22,7 @@ from typing import Any, Dict, Optional
 from urllib import error, parse, request
 
 from weex_agent_state import RuntimePreflightError, ensure_private_runtime_ready, refresh_agent_records
+from weex_profile_language import resolve_language
 from weex_url_policy import BaseUrlPolicyError, open_weex_request, validate_weex_base_url
 
 ProfileError = RuntimeError
@@ -32,6 +33,8 @@ resolve_profile = None
 DEFAULT_BASE_URL = "https://api-contract.weex.com"
 DEFAULT_LOCALE = "en-US"
 DEFAULT_TIMEOUT = 15.0
+DEFAULT_TRADING_MODE = "live"
+TRADING_MODES = ("live", "demo")
 GET_BODY_UNSUPPORTED_MESSAGE = (
     "GET requests do not accept --body. Pass request fields with --query instead."
 )
@@ -60,6 +63,7 @@ class Endpoint:
     auth: bool
     mutating: bool
     doc_url: str
+    permission: str = ""
 
 
 def load_endpoint_map() -> Dict[str, Endpoint]:
@@ -78,6 +82,7 @@ def load_endpoint_map() -> Dict[str, Endpoint]:
             auth=auth,
             mutating=auth and method in {"POST", "PUT", "DELETE"},
             doc_url=d.get("doc_url", ""),
+            permission=d.get("permission", ""),
         )
         endpoint_map[ep.key] = ep
     return endpoint_map
@@ -300,6 +305,115 @@ def output_json(payload: Dict[str, Any], pretty: bool) -> None:
         print(json.dumps(payload, ensure_ascii=False))
 
 
+def normalize_trading_mode(raw: str) -> str:
+    mode = (raw or "").strip().lower()
+    if mode not in TRADING_MODES:
+        raise SystemExit(f"invalid_trading_mode: expected one of {', '.join(TRADING_MODES)}")
+    return mode
+
+
+def endpoint_is_demo(endpoint: Endpoint) -> bool:
+    return endpoint.key.startswith("sim.") or endpoint.path.startswith("/capi/v3/sim/")
+
+
+def environment_for_mode(trading_mode: str) -> Dict[str, Any]:
+    mode = normalize_trading_mode(trading_mode)
+    if mode == "demo":
+        return {
+            "trading_mode": "demo",
+            "label": "demo",
+            "market": "futures",
+            "uses_real_funds": False,
+            "notice": "This operation targets WEEX futures demo mode.",
+        }
+    return {
+        "trading_mode": "live",
+        "label": "live",
+        "market": "futures",
+        "uses_real_funds": True,
+        "notice": "This operation targets real WEEX futures trading.",
+    }
+
+
+def user_environment_prefix(environment: Dict[str, Any], language: Optional[str] = None) -> str:
+    resolved_language = resolve_language(language)
+    mode = normalize_trading_mode(str(environment.get("trading_mode") or DEFAULT_TRADING_MODE))
+    if resolved_language == "zh":
+        label = "模拟盘" if mode == "demo" else "真实盘"
+        return f"当前交易环境：{label}"
+    label = "demo trading" if mode == "demo" else "real trading"
+    return f"Current trading mode: {label}"
+
+
+def add_environment_context(payload: Dict[str, Any], environment: Dict[str, Any]) -> None:
+    payload["environment"] = environment
+    payload["user_environment_prefix"] = user_environment_prefix(environment)
+
+
+def validate_endpoint_trading_mode(endpoint: Endpoint, trading_mode: str) -> str:
+    mode = normalize_trading_mode(trading_mode)
+    is_demo = endpoint_is_demo(endpoint)
+    if is_demo and mode != "demo":
+        raise SystemExit(
+            f"demo_endpoint_requires_demo_mode: endpoint {endpoint.key} requires --trading-mode demo"
+        )
+    if mode == "demo" and endpoint.auth and not is_demo:
+        raise SystemExit(
+            f"demo_endpoint_unsupported: endpoint {endpoint.key} is not a simulated futures endpoint"
+        )
+    return mode
+
+
+def validate_confirm_flags(
+    endpoint: Endpoint,
+    trading_mode: str,
+    dry_run: bool,
+    confirm_live: bool,
+    confirm_demo: bool,
+) -> None:
+    if confirm_live and confirm_demo:
+        raise SystemExit("confirm_flag_mode_mismatch: pass only one of --confirm-live or --confirm-demo")
+    if not endpoint.mutating or dry_run:
+        return
+    if trading_mode == "demo":
+        if not confirm_demo or confirm_live:
+            raise SystemExit(
+                f"confirm_flag_mode_mismatch: demo mutating request for {endpoint.key} requires --confirm-demo"
+            )
+        return
+    if not confirm_live or confirm_demo:
+        raise SystemExit(
+            f"confirm_flag_mode_mismatch: live mutating request for {endpoint.key} requires --confirm-live"
+        )
+
+
+def _upper_body_value(body: Dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = body.get(key)
+        if value is not None:
+            return str(value).strip().upper()
+    return ""
+
+
+def _is_directional_close_like_order(body: Dict[str, Any]) -> bool:
+    side = _upper_body_value(body, "side")
+    position_side = _upper_body_value(body, "positionSide", "position_side")
+    return (position_side == "LONG" and side == "SELL") or (
+        position_side == "SHORT" and side == "BUY"
+    )
+
+
+def validate_pending_order_routing(endpoint: Endpoint, body: Dict[str, Any]) -> None:
+    if endpoint.key != "transaction.place_pending_order":
+        return
+    if _is_directional_close_like_order(body):
+        raise SystemExit(
+            "pending_close_requires_tp_sl: price-threshold close requests must use "
+            "preview-tp-sl/confirm-tp-sl (placeTpSlOrder) because generic "
+            "place_pending_order is not guaranteed reduce-only"
+        )
+
+
 def execute_endpoint(
     client: WeexContractClient,
     endpoint_key: str,
@@ -307,21 +421,21 @@ def execute_endpoint(
     body: Dict[str, Any],
     dry_run: bool,
     confirm_live: bool,
+    confirm_demo: bool,
+    trading_mode: str,
     pretty: bool,
 ) -> int:
     endpoint = ENDPOINTS[endpoint_key]
-
-    if endpoint.mutating and not confirm_live and not dry_run:
-        raise SystemExit(
-            f"Refusing live mutating request for {endpoint_key}. "
-            "Use --confirm-live to send, or --dry-run to preview."
-        )
+    mode = validate_endpoint_trading_mode(endpoint, trading_mode)
+    validate_confirm_flags(endpoint, mode, dry_run, confirm_live, confirm_demo)
+    validate_pending_order_routing(endpoint, body)
 
     prepared = client.prepare_request(
         endpoint,
         query=query,
         body=body,
     )
+    environment = environment_for_mode(mode) if endpoint.auth else None
     if dry_run:
         preview = {
             "dry_run": True,
@@ -332,6 +446,8 @@ def execute_endpoint(
             "query": query,
             "body": body,
         }
+        if environment is not None:
+            add_environment_context(preview, environment)
         output_json(preview, pretty)
         return 0
 
@@ -344,6 +460,8 @@ def execute_endpoint(
         "ok": response.get("ok"),
         "result": response.get("data") if response.get("ok") else response.get("error"),
     }
+    if environment is not None:
+        add_environment_context(payload, environment)
     output_json(payload, pretty)
     return 0 if response.get("ok") else 1
 
@@ -367,6 +485,15 @@ def normalize_contract_trade_symbol(symbol: str) -> str:
     if s.endswith("USDT") and len(s) > 4:
         return s
     raise SystemExit(f"Unsupported symbol format: {symbol}. Expected like ETHUSDT.")
+
+
+def normalize_contract_demo_trade_symbol(symbol: str) -> str:
+    normalized = normalize_contract_trade_symbol(symbol)
+    if normalized.endswith("SUSDT"):
+        return normalized
+    if normalized.endswith("USDT"):
+        return f"{normalized[:-4]}SUSDT"
+    return normalized
 
 
 def normalize_contract_symbol(symbol: str) -> str:
@@ -421,6 +548,7 @@ def cmd_list_endpoints(args: argparse.Namespace) -> int:
                 "path": endpoint.path,
                 "auth": endpoint.auth,
                 "mutating": endpoint.mutating,
+                "permission": endpoint.permission,
                 "doc_url": endpoint.doc_url,
             }
         )
@@ -438,13 +566,21 @@ def cmd_call(args: argparse.Namespace, client: WeexContractClient) -> int:
         body=body,
         dry_run=args.dry_run,
         confirm_live=args.confirm_live,
+        confirm_demo=args.confirm_demo,
+        trading_mode=args.trading_mode,
         pretty=args.pretty,
     )
 
 
 def cmd_place_order(args: argparse.Namespace, client: WeexContractClient) -> int:
+    mode = normalize_trading_mode(args.trading_mode)
+    body_symbol = (
+        normalize_contract_demo_trade_symbol(args.symbol)
+        if mode == "demo"
+        else normalize_contract_trade_symbol(args.symbol)
+    )
     body: Dict[str, Any] = {
-        "symbol": normalize_contract_trade_symbol(args.symbol),
+        "symbol": body_symbol,
         "side": args.side.upper(),
         "positionSide": args.position_side.upper(),
         "type": args.order_type.upper(),
@@ -475,13 +611,21 @@ def cmd_place_order(args: argparse.Namespace, client: WeexContractClient) -> int
         if "timeInForce" in body:
             raise SystemExit("time-in-force must be omitted when type=MARKET")
 
+    endpoint_key = (
+        "sim.transaction.place_order"
+        if mode == "demo"
+        else find_endpoint_key_by_doc_suffix("PlaceOrder")
+    )
+
     return execute_endpoint(
         client=client,
-        endpoint_key=find_endpoint_key_by_doc_suffix("PlaceOrder"),
+        endpoint_key=endpoint_key,
         query={},
         body=body,
         dry_run=args.dry_run,
         confirm_live=args.confirm_live,
+        confirm_demo=args.confirm_demo,
+        trading_mode=args.trading_mode,
         pretty=args.pretty,
     )
 
@@ -502,6 +646,8 @@ def cmd_cancel_order(args: argparse.Namespace, client: WeexContractClient) -> in
         body={},
         dry_run=args.dry_run,
         confirm_live=args.confirm_live,
+        confirm_demo=False,
+        trading_mode=DEFAULT_TRADING_MODE,
         pretty=args.pretty,
     )
 
@@ -514,6 +660,8 @@ def cmd_ticker(args: argparse.Namespace, client: WeexContractClient) -> int:
         body={},
         dry_run=False,
         confirm_live=False,
+        confirm_demo=False,
+        trading_mode=DEFAULT_TRADING_MODE,
         pretty=args.pretty,
     )
 
@@ -529,6 +677,8 @@ def cmd_poll_ticker(args: argparse.Namespace, client: WeexContractClient) -> int
             body={},
             dry_run=False,
             confirm_live=False,
+            confirm_demo=False,
+            trading_mode=DEFAULT_TRADING_MODE,
             pretty=args.pretty,
         )
         if code != 0:
@@ -536,6 +686,20 @@ def cmd_poll_ticker(args: argparse.Namespace, client: WeexContractClient) -> int
         if args.count > 0 and run_count >= args.count:
             return 0
         time.sleep(args.interval)
+
+
+def add_trading_mode_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--trading-mode",
+        choices=TRADING_MODES,
+        default=DEFAULT_TRADING_MODE,
+        help="Trading mode for private contract endpoints",
+    )
+
+
+def add_confirm_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--confirm-live", action="store_true", help="Allow live mutating requests")
+    parser.add_argument("--confirm-demo", action="store_true", help="Allow demo mutating requests")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -582,7 +746,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_call.add_argument("--query", default="{}", help="JSON object string")
     p_call.add_argument("--body", default="{}", help="JSON object string")
     p_call.add_argument("--dry-run", action="store_true", help="Preview signed request without sending")
-    p_call.add_argument("--confirm-live", action="store_true", help="Allow live mutating requests")
+    add_trading_mode_argument(p_call)
+    add_confirm_arguments(p_call)
     p_call.add_argument("--pretty", action="store_true", help="Pretty-print JSON output for easier reading")
 
     p_place = sub.add_parser(
@@ -604,7 +769,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_place.add_argument("--tp-working-type", default=None, choices=["CONTRACT_PRICE", "MARK_PRICE", "contract_price", "mark_price"], help="Price source used to evaluate the take-profit trigger")
     p_place.add_argument("--sl-working-type", default=None, choices=["CONTRACT_PRICE", "MARK_PRICE", "contract_price", "mark_price"], help="Price source used to evaluate the stop-loss trigger")
     p_place.add_argument("--dry-run", action="store_true", help="Build and sign the request without sending it")
-    p_place.add_argument("--confirm-live", action="store_true", help="Required to actually send the order instead of refusing live mutation")
+    add_trading_mode_argument(p_place)
+    add_confirm_arguments(p_place)
     p_place.add_argument("--pretty", action="store_true", help="Pretty-print JSON output for easier reading")
 
     p_cancel = sub.add_parser(
@@ -616,7 +782,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_cancel.add_argument("--order-id", default=None, help="WEEX order id to cancel")
     p_cancel.add_argument("--client-oid", default=None, help="Client order id to cancel when you do not have the WEEX order id")
     p_cancel.add_argument("--dry-run", action="store_true", help="Build and sign the cancel request without sending it")
-    p_cancel.add_argument("--confirm-live", action="store_true", help="Required to actually send the cancel request")
+    p_cancel.add_argument("--confirm-live", action="store_true", help="Allow the live cancel request")
     p_cancel.add_argument("--pretty", action="store_true", help="Pretty-print JSON output for easier reading")
 
     p_ticker = sub.add_parser(

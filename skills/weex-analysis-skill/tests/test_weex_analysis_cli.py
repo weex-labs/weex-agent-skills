@@ -112,6 +112,83 @@ class DisclaimerTests(unittest.TestCase):
         result = json.loads(completed.stdout)
         self.assertEqual(result["disclaimer"], EXPECTED_STANDARD_DISCLAIMER)
 
+    def test_account_risk_analysis_preserves_and_renders_trading_environment(self) -> None:
+        payload = {
+            "trading_mode": "demo",
+            "environment": {
+                "trading_mode": "demo",
+                "label": "demo",
+                "market": "futures",
+                "uses_real_funds": False,
+                "notice": "This operation targets WEEX futures demo mode.",
+            },
+            "account_scope": "sim_futures",
+            "mode": "account_scan",
+            "market": "futures",
+            "account_snapshot": {
+                "equity": 1000,
+                "available_balance": 900,
+                "account_scope": "sim_futures",
+            },
+            "positions": [],
+            "recent_orders": [],
+            "conditional_orders": [],
+            "open_orders": [],
+            "degraded_reasons": ["demo_futures_open_orders_unavailable"],
+            "constraints": [],
+        }
+
+        result = analysis.analyze_account_risk(payload)
+        text = analysis._render_text(result)
+
+        self.assertEqual(result["trading_mode"], "demo")
+        self.assertEqual(result["environment"]["trading_mode"], "demo")
+        self.assertEqual(result["environment"]["market"], "futures")
+        self.assertEqual(result["account_scope"], "sim_futures")
+        self.assertIn("Trading Mode: demo trading", text)
+        self.assertNotIn("Trading Environment:", text)
+        self.assertNotIn("Trading Mode: demo\n", text)
+        self.assertIn("Uses Real Funds: false", text)
+        self.assertIn("demo_futures_open_orders_unavailable", text)
+
+    def test_text_output_renders_top_level_trading_mode_without_environment_object(self) -> None:
+        payload = {
+            "trading_mode": "demo",
+            "positions": [
+                {
+                    "symbol": "BTCUSDT",
+                    "side": "long",
+                    "notional": 1000,
+                }
+            ],
+            "equity": 10000,
+            "available_balance": 8000,
+        }
+
+        result = analysis.analyze_snapshot(payload)
+        text = analysis._render_text(result)
+
+        self.assertEqual(result["trading_mode"], "demo")
+        self.assertIn("Trading Mode: demo trading", text)
+
+    def test_text_output_uses_chinese_trading_mode_label_when_language_is_zh(self) -> None:
+        payload = {
+            "language": "zh",
+            "trading_mode": "demo",
+            "environment": {
+                "trading_mode": "demo",
+                "market": "futures",
+                "uses_real_funds": False,
+            },
+            "positions": [],
+        }
+
+        result = analysis.analyze_snapshot(payload)
+        text = analysis._render_text(result)
+
+        self.assertIn("Trading Mode: 模拟盘", text)
+        self.assertNotIn("Trading Mode: demo trading", text)
+
 
 class SnapshotAnalysisTests(unittest.TestCase):
     def test_analyze_snapshot_reports_concentration_and_collateral_risk(self) -> None:
@@ -242,6 +319,25 @@ class SnapshotAnalysisTests(unittest.TestCase):
         self.assertEqual(result["degraded_reasons"], ["snapshot_source_partial"])
         self.assertEqual(result["constraints"][0]["code"], "snapshot_filter_applied")
 
+    def test_analyze_snapshot_marks_missing_risk_fields_as_partial(self) -> None:
+        payload = {
+            "positions": [
+                {
+                    "symbol": "BTCUSDT",
+                    "side": "long",
+                    "quantity": 0.01,
+                }
+            ],
+        }
+
+        result = analysis.analyze_snapshot(payload)
+
+        self.assertTrue(result["partial"])
+        self.assertIn("snapshot_missing_equity", result["degraded_reasons"])
+        self.assertIn("snapshot_missing_available_balance", result["degraded_reasons"])
+        self.assertIn("snapshot_position_missing_mark_price", result["degraded_reasons"])
+        self.assertIn("snapshot_position_missing_leverage", result["degraded_reasons"])
+
 
 class FillAnalysisTests(unittest.TestCase):
     def test_analyze_fills_aggregates_realized_pnl_and_fees(self) -> None:
@@ -283,6 +379,58 @@ class FillAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(result["fees"], 3.4)
         self.assertAlmostEqual(result["net_realized_after_fees"], 24.6)
         self.assertAlmostEqual(result["win_rate"], 0.33333333)
+
+    def test_analyze_fills_marks_missing_realized_pnl_and_fee_as_partial(self) -> None:
+        payload = {
+            "fills": [
+                {
+                    "symbol": "BTCUSDT",
+                    "side": "sell",
+                    "quantity": 0.01,
+                    "price": 65000,
+                },
+                {
+                    "symbol": "ETHUSDT",
+                    "side": "sell",
+                    "quantity": 0.5,
+                    "price": 3080,
+                    "realized_pnl": 40,
+                    "fee": 1.4,
+                },
+            ]
+        }
+
+        result = analysis.analyze_fills(payload)
+        text = analysis._render_text(result)
+
+        self.assertTrue(result["partial"])
+        self.assertIn("fills_missing_realized_pnl", result["degraded_reasons"])
+        self.assertIn("fills_missing_fee", result["degraded_reasons"])
+        self.assertIn("Partial Analysis", text)
+        self.assertIn("degraded: fills_missing_realized_pnl", text)
+        self.assertIn("degraded: fills_missing_fee", text)
+
+    def test_analyze_fills_direct_call_preserves_trading_mode_context(self) -> None:
+        payload = {
+            "language": "zh",
+            "trading_mode": "demo",
+            "fills": [
+                {
+                    "symbol": "BTCUSDT",
+                    "side": "sell",
+                    "quantity": 0.01,
+                    "price": 64000,
+                    "realized_pnl": 10,
+                    "fee": 0.8,
+                }
+            ],
+        }
+
+        result = analysis.analyze_fills(payload)
+        text = analysis._render_text(result)
+
+        self.assertEqual(result["trading_mode"], "demo")
+        self.assertIn("Trading Mode: 模拟盘", text)
 
     def test_analyze_fills_cli_text_uses_fill_win_rate_label(self) -> None:
         payload = {
@@ -395,6 +543,43 @@ class FillAnalysisTests(unittest.TestCase):
 
 
 class ReplayAnalysisTests(unittest.TestCase):
+    def test_analyze_replay_preserves_trader_environment_context(self) -> None:
+        payload = {
+            "analysis_type": "replay",
+            "market": "futures",
+            "trading_mode": "demo",
+            "environment": {
+                "trading_mode": "demo",
+                "label": "demo",
+                "market": "futures",
+                "uses_real_funds": False,
+                "notice": "This operation targets WEEX futures demo mode.",
+            },
+            "account_scope": "sim_futures",
+            "orders": [],
+            "fills": [],
+        }
+
+        result = analysis.analyze_replay(payload)
+        review = analysis.review_trades(payload)
+        text = analysis._render_text(result)
+        review_text = analysis._render_text(review)
+
+        self.assertEqual(result["trading_mode"], "demo")
+        self.assertEqual(result["environment"]["trading_mode"], "demo")
+        self.assertEqual(result["account_scope"], "sim_futures")
+        self.assertEqual(review["trading_mode"], "demo")
+        self.assertEqual(review["environment"]["trading_mode"], "demo")
+        self.assertEqual(review["account_scope"], "sim_futures")
+        self.assertIn("Trading Mode: demo trading", text)
+        self.assertNotIn("Trading Environment:", text)
+        self.assertNotIn("Trading Mode: demo\n", text)
+        self.assertIn("Uses Real Funds: false", text)
+        self.assertIn("Trading Mode: demo trading", review_text)
+        self.assertNotIn("Trading Environment:", review_text)
+        self.assertNotIn("Trading Mode: demo\n", review_text)
+        self.assertIn("Uses Real Funds: false", review_text)
+
     def test_analyze_replay_reconstructs_trade_episodes_and_metrics(self) -> None:
         payload = {
             "analysis_type": "replay",
@@ -1338,6 +1523,28 @@ class ProfileAnalysisTests(unittest.TestCase):
         self.assertGreaterEqual(len(result["weaknesses"]), 1)
         self.assertIn("cannot predict future", result["warning"].lower())
 
+    def test_analyze_profile_direct_call_preserves_trading_mode_context(self) -> None:
+        payload = {
+            "language": "zh",
+            "trading_mode": "live",
+            "analysis_type": "profile",
+            "selected_period": "90d",
+            "closed_trade_count": 24,
+            "metrics": {
+                "median_hold_ms": 2 * 60 * 60 * 1000,
+                "active_day_trade_average": 6,
+                "risk_score": 0.82,
+                "win_rate": 0.42,
+                "profit_factor": 0.78,
+            },
+        }
+
+        result = analysis.analyze_profile(payload)
+        text = analysis._render_text(result)
+
+        self.assertEqual(result["trading_mode"], "live")
+        self.assertIn("Trading Mode: 真实盘", text)
+
     def test_analyze_profile_minimal_sample_returns_basic_stats_only(self) -> None:
         payload = {
             "analysis_type": "profile",
@@ -1836,6 +2043,15 @@ class ProfileAnalysisTests(unittest.TestCase):
 
 
 class OrderRiskAnalysisTests(unittest.TestCase):
+    def test_analyze_order_risk_marks_missing_order_context_as_partial(self) -> None:
+        result = analysis.analyze_order_risk({})
+
+        self.assertTrue(result["partial"])
+        self.assertTrue(result["has_risk"])
+        self.assertIn("order_risk_missing_order_preview", result["degraded_reasons"])
+        self.assertIn("order_risk_missing_account_snapshot", result["degraded_reasons"])
+        self.assertIn("order_context_incomplete", {alert["type"] for alert in result["alerts"]})
+
     def test_analyze_order_risk_returns_structured_alerts_and_confirmation_hint(self) -> None:
         payload = {
             "order_preview": {
