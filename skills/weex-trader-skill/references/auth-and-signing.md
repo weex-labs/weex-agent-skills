@@ -26,7 +26,7 @@ Recommended credential source:
 
 Optional environment overrides still supported:
 - `WEEX_TRADER_SKILL_HOME`: override the runtime state directory for profiles, vault files, and agent cache
-- `WEEX_API_TIMEOUT`: override HTTP timeout in seconds for API calls
+- `WEEX_API_TIMEOUT`: override HTTP timeout in seconds for API calls. Partner REST defaults to 30 seconds; contract and spot keep their existing defaults. A timeout never authorizes an automatic retry.
 
 Credential source policy:
 - prefer saved profiles

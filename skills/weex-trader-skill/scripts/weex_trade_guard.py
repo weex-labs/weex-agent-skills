@@ -268,8 +268,13 @@ def _alert_level_is_high(alert: dict[str, Any]) -> bool:
 
 
 def _alert_reason_zh(alert: dict[str, Any]) -> str:
-    if alert.get("type") == "missing_tp_sl":
+    alert_type = alert.get("type")
+    if alert_type == "missing_tp_sl":
         return "这笔订单没有止盈或止损保护，需要你明确接受无保护仓位风险后才能继续。"
+    if alert_type in {"high_trade_frequency", "frequent_trading"}:
+        return "近期交易频率偏高，请暂停并确认这次入场仍满足交易条件。"
+    if alert_type == "high_leverage_or_concentration":
+        return "当前杠杆或集中度已经偏高，确认前应降低杠杆、减小仓位或分散风险。"
     reason = str(alert.get("reason") or alert.get("suggestion") or alert.get("type") or "请先复核上方风险提示。").strip()
     if reason[-1:] not in "。！？.!?":
         reason += "。"
@@ -277,12 +282,43 @@ def _alert_reason_zh(alert: dict[str, Any]) -> str:
 
 
 def _alert_reason_en(alert: dict[str, Any]) -> str:
-    if alert.get("type") == "missing_tp_sl":
+    alert_type = alert.get("type")
+    if alert_type == "missing_tp_sl":
         return "The order has no take-profit or stop-loss protection. Continue only if you explicitly accept an unprotected position."
+    if alert_type in {"high_trade_frequency", "frequent_trading"}:
+        return "Recent trading frequency is high. Pause and confirm this setup still meets the entry criteria."
+    if alert_type == "high_leverage_or_concentration":
+        return "Current leverage or resulting concentration is already elevated. Lower leverage, reduce size, or diversify exposure before confirming."
     reason = str(alert.get("reason") or alert.get("suggestion") or alert.get("type") or "Review the risk alert above before continuing.").strip()
     if reason[-1:] not in ".!?。！？":
         reason += "."
     return reason
+
+
+def _alert_label_zh(alert: dict[str, Any]) -> str:
+    labels = {
+        "missing_tp_sl": "缺少止盈止损",
+        "high_trade_frequency": "频繁交易",
+        "frequent_trading": "频繁交易",
+        "high_leverage_or_concentration": "高杠杆或集中度",
+        "low_free_balance": "可用余额偏低",
+        "oversized_position": "仓位偏大",
+        "limit_price_too_far": "限价偏离",
+    }
+    return labels.get(str(alert.get("type") or ""), "风险提示")
+
+
+def _alert_label_en(alert: dict[str, Any]) -> str:
+    labels = {
+        "missing_tp_sl": "Missing TP/SL",
+        "high_trade_frequency": "Frequent trading",
+        "frequent_trading": "Frequent trading",
+        "high_leverage_or_concentration": "High leverage or concentration",
+        "low_free_balance": "Low free balance",
+        "oversized_position": "Oversized position",
+        "limit_price_too_far": "Limit price deviation",
+    }
+    return labels.get(str(alert.get("type") or ""), "Risk alert")
 
 
 def _format_zh_alert_summary(preview_context: dict[str, Any] | None) -> str:
@@ -291,7 +327,13 @@ def _format_zh_alert_summary(preview_context: dict[str, Any] | None) -> str:
         return "风险提示：未发现高风险提示。"
     alert = next((candidate for candidate in alerts if _alert_level_is_high(candidate)), alerts[0])
     prefix = "高风险提示" if _alert_level_is_high(alert) else "风险提示"
-    return f"{prefix}：{_alert_reason_zh(alert)}"
+    lines = [f"{prefix}：{_alert_reason_zh(alert)}"]
+    remaining_alerts = [candidate for candidate in alerts if candidate is not alert]
+    if remaining_alerts:
+        lines.append("其他风险提示：")
+        for candidate in remaining_alerts:
+            lines.append(f"- {_alert_label_zh(candidate)}：{_alert_reason_zh(candidate)}")
+    return "\n".join(lines)
 
 
 def _format_en_alert_summary(preview_context: dict[str, Any] | None) -> str:
@@ -300,7 +342,13 @@ def _format_en_alert_summary(preview_context: dict[str, Any] | None) -> str:
         return "Risk alert: no high-risk alerts were detected."
     alert = next((candidate for candidate in alerts if _alert_level_is_high(candidate)), alerts[0])
     prefix = "High-risk alert" if _alert_level_is_high(alert) else "Risk alert"
-    return f"{prefix}: {_alert_reason_en(alert)}"
+    lines = [f"{prefix}: {_alert_reason_en(alert)}"]
+    remaining_alerts = [candidate for candidate in alerts if candidate is not alert]
+    if remaining_alerts:
+        lines.append("Other risk alerts:")
+        for candidate in remaining_alerts:
+            lines.append(f"- {_alert_label_en(candidate)}: {_alert_reason_en(candidate)}")
+    return "\n".join(lines)
 
 
 def _build_zh_confirmation_instruction(
@@ -575,6 +623,9 @@ def _submit_order(
             "quantity": raw_order["quantity"],
             "price": raw_order.get("price"),
             "timeInForce": raw_order.get("time_in_force") or raw_order.get("timeInForce"),
+            "newClientOrderId": raw_order.get("new_client_order_id")
+            or raw_order.get("newClientOrderId")
+            or spot_api.generate_client_order_id(),
         }
         body = {key: value for key, value in body.items() if value not in (None, "")}
         prepared = client.prepare_request(endpoint, query={}, body=body)

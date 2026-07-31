@@ -139,6 +139,137 @@ class MonitorTaskTests(unittest.TestCase):
         self.assertEqual(task["environment"]["trading_mode"], "demo")
         self.assertFalse(task["environment"]["uses_real_funds"])
 
+    def test_order_baseline_monitor_normalizes_baseline_and_fixed_quantity(self) -> None:
+        task = monitor.normalize_task(
+            {
+                "task_id": "mon_order_baseline",
+                "task_type": "order_baseline_pnl_monitor",
+                "profile": "demo-profile",
+                "trading_mode": "demo",
+                "symbol": "BTCUSDT",
+                "position_side": "LONG",
+                "baseline": {
+                    "entry_price": "70000",
+                    "quantity": "0.01",
+                },
+                "condition": {
+                    "metric": "baseline_unrealized_pnl",
+                    "operator": ">",
+                    "threshold": "0",
+                },
+                "action": {
+                    "type": "market_close",
+                    "target": "LONG",
+                },
+                "callback": {"type": "current_thread"},
+            },
+            now_ms=1000,
+        )
+
+        self.assertEqual(task["task_type"], "order_baseline_pnl_monitor")
+        self.assertEqual(task["baseline"], {"entry_price": "70000", "quantity": "0.01"})
+        self.assertEqual(task["condition"]["metric"], "baseline_unrealized_pnl")
+        self.assertEqual(task["action"]["quantity"], "0.01")
+
+        mismatched_quantity = json.loads(json.dumps(task))
+        mismatched_quantity["action"]["quantity"] = "0.02"
+        with self.assertRaisesRegex(monitor.MonitorInputError, "baseline.quantity"):
+            monitor.normalize_task(mismatched_quantity, now_ms=1000)
+
+    def test_order_baseline_pnl_trigger_uses_long_baseline_quantity(self) -> None:
+        task = {
+            "task_type": "order_baseline_pnl_monitor",
+            "profile": "demo",
+            "trading_mode": "demo",
+            "symbol": "BTCUSDT",
+            "position_side": "LONG",
+            "baseline": {"entry_price": "70000", "quantity": "0.01"},
+            "condition": {
+                "metric": "baseline_unrealized_pnl",
+                "operator": ">",
+                "threshold": "0",
+            },
+            "action": {
+                "type": "market_close",
+                "target": "LONG",
+            },
+            "callback": {"type": "current_thread"},
+        }
+        positions = [
+            {
+                "symbol": "BTCUSDT",
+                "side": "LONG",
+                "quantity": "0.05",
+                "current_price": "70010",
+                "unrealized_pnl": "9.99",
+            }
+        ]
+
+        result = monitor.evaluate_order_baseline_pnl_task(task, positions)
+
+        self.assertTrue(result["triggered"])
+        self.assertEqual(result["trigger_snapshot"]["baseline_unrealized_pnl"], "0.10")
+        self.assertEqual(result["trigger_snapshot"]["current_price"], "70010")
+        self.assertEqual(result["trigger_snapshot"]["baseline_entry_price"], "70000")
+        self.assertEqual(result["close_order"]["quantity"], "0.01")
+        self.assertEqual(result["close_order"]["side"], "SELL")
+
+    def test_order_baseline_pnl_trigger_uses_short_formula(self) -> None:
+        task = {
+            "task_type": "order_baseline_pnl_monitor",
+            "profile": "demo",
+            "trading_mode": "demo",
+            "symbol": "BTCUSDT",
+            "position_side": "SHORT",
+            "baseline": {"entry_price": "70000", "quantity": "0.02"},
+            "condition": {
+                "metric": "baseline_unrealized_pnl",
+                "operator": ">",
+                "threshold": "0",
+            },
+            "action": {
+                "type": "market_close",
+                "target": "SHORT",
+            },
+            "callback": {"type": "current_thread"},
+        }
+        positions = [{"symbol": "BTCUSDT", "side": "SHORT", "quantity": "0.02", "markPrice": "69980"}]
+
+        result = monitor.evaluate_order_baseline_pnl_task(task, positions)
+
+        self.assertTrue(result["triggered"])
+        self.assertEqual(result["trigger_snapshot"]["baseline_unrealized_pnl"], "0.40")
+        self.assertEqual(result["close_order"]["side"], "BUY")
+
+    def test_order_baseline_pnl_missing_current_price_does_not_trigger(self) -> None:
+        task = {
+            "task_type": "order_baseline_pnl_monitor",
+            "profile": "demo",
+            "trading_mode": "demo",
+            "symbol": "BTCUSDT",
+            "position_side": "LONG",
+            "baseline": {"entry_price": "70000", "quantity": "0.01"},
+            "condition": {
+                "metric": "baseline_unrealized_pnl",
+                "operator": ">",
+                "threshold": "0",
+            },
+            "action": {
+                "type": "market_close",
+                "target": "LONG",
+            },
+            "callback": {"type": "current_thread"},
+        }
+
+        result = monitor.evaluate_order_baseline_pnl_task(
+            task,
+            [{"symbol": "BTCUSDT", "side": "LONG", "quantity": "0.01"}],
+        )
+
+        self.assertFalse(result["triggered"])
+        self.assertEqual(result["reason"], "price_not_found")
+        self.assertNotIn("close_order", result)
+
     def test_price_threshold_condition_error_points_to_official_conditional_orders(self) -> None:
         task_json = {
             "task_type": "position_pnl_monitor",
@@ -957,6 +1088,63 @@ class MonitorTaskTests(unittest.TestCase):
         )
         self.assertNotIn("current unrealized PnL: -4.86", en_prepared["confirmation_text"])
 
+    def test_order_baseline_live_confirmation_text_uses_baseline_scope(self) -> None:
+        task_json = {
+            "task_id": "mon_live_order_baseline",
+            "task_type": "order_baseline_pnl_monitor",
+            "profile": "demo",
+            "trading_mode": "demo",
+            "symbol": "BTCUSDT",
+            "position_side": "LONG",
+            "frequency_seconds": 5,
+            "baseline": {
+                "entry_price": "70000",
+                "quantity": "0.01",
+            },
+            "condition": {
+                "metric": "baseline_unrealized_pnl",
+                "operator": ">",
+                "threshold": "0",
+            },
+            "action": {
+                "type": "market_close",
+                "target": "LONG",
+            },
+            "callback": {"type": "current_thread"},
+        }
+        account_payload = {
+            "positions": [
+                {
+                    "symbol": "BTCUSDT",
+                    "side": "LONG",
+                    "quantity": "0.022",
+                    "unrealized_pnl": "-4.86",
+                }
+            ],
+            "market_snapshot": {"current_price": "70010"},
+            "degraded_reasons": [],
+            "partial": False,
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with mock.patch.dict(os.environ, {"WEEX_MONITOR_SKILL_HOME": tempdir}, clear=False):
+                with mock.patch.object(monitor, "_run_json_command", return_value=account_payload):
+                    prepared = monitor.prepare_live_confirmation(
+                        task_json,
+                        duration_seconds=3600,
+                        now_ms=1000,
+                        language="zh",
+                    )
+
+        text = prepared["confirmation_text"]
+        self.assertIn("订单基准估算未实现盈亏", text)
+        self.assertIn("不是交易所原生单订单盈亏", text)
+        self.assertIn("基准开仓价: 70000", text)
+        self.assertIn("基准数量: 0.01", text)
+        self.assertIn("当前基准估算未实现盈亏: 0.10", text)
+        self.assertIn("聚合持仓数量 0.022", text)
+        self.assertNotIn("按固定平仓数量 0.01 折算未实现盈亏", text)
+
     def test_live_confirmation_defaults_codex_reporting_to_one_minute(self) -> None:
         task_json = {
             "task_id": "mon_live_report_default",
@@ -1718,6 +1906,72 @@ class MonitorTaskTests(unittest.TestCase):
         self.assertEqual(preview_order["position_side"], "LONG")
         self.assertEqual(preview_order["new_client_order_id"], "monitor_mon_pnl_live")
 
+    def test_run_live_once_executes_triggered_order_baseline_close_through_trader_guard(self) -> None:
+        task_json = {
+            "task_id": "mon_order_baseline_live",
+            "task_type": "order_baseline_pnl_monitor",
+            "profile": "demo",
+            "trading_mode": "live",
+            "symbol": "BTCUSDT",
+            "position_side": "LONG",
+            "baseline": {"entry_price": "70000", "quantity": "0.01"},
+            "condition": {
+                "metric": "baseline_unrealized_pnl",
+                "operator": ">",
+                "threshold": "0",
+            },
+            "action": {
+                "type": "market_close",
+                "target": "LONG",
+            },
+            "callback": {"type": "current_thread"},
+        }
+        account_payload = {
+            "positions": [
+                {
+                    "symbol": "BTCUSDT",
+                    "side": "LONG",
+                    "quantity": "0.05",
+                }
+            ],
+            "market_snapshot": {"current_price": "70010"},
+            "degraded_reasons": [],
+            "partial": False,
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with mock.patch.dict(os.environ, {"WEEX_MONITOR_SKILL_HOME": tempdir}, clear=False):
+                self._prepare_and_confirm(task_json, now_ms=1000)
+                with mock.patch.object(
+                    monitor,
+                    "_run_json_command",
+                    side_effect=[
+                        account_payload,
+                        account_payload,
+                        {"intent_id": "intent-order-close", "risk_signature": "sig-order-close"},
+                        {
+                            "ok": True,
+                            "orderId": "9101",
+                            "clientOrderId": "monitor_mon_order_baseline_live",
+                            "status": "FILLED",
+                        },
+                    ],
+                ) as runner:
+                    results = monitor.run_live_once(confirm_live=True, now_ms=2000)
+                tasks = monitor.load_tasks()
+                preview_command = runner.call_args_list[2].args[0]
+
+        self.assertEqual(results[0]["status"], "completed")
+        self.assertTrue(results[0]["result"]["triggered"])
+        self.assertEqual(results[0]["result"]["trigger_snapshot"]["baseline_unrealized_pnl"], "0.10")
+        self.assertEqual(results[0]["close_order"]["quantity"], "0.01")
+        self.assertEqual(tasks[0]["status"], "completed")
+        preview_order_json = preview_command[preview_command.index("--order-json") + 1]
+        preview_order = json.loads(preview_order_json)
+        self.assertEqual(preview_order["side"], "SELL")
+        self.assertEqual(preview_order["quantity"], "0.01")
+        self.assertEqual(preview_order["new_client_order_id"], "monitor_mon_order_baseline_live")
+
     def test_run_live_once_allows_demo_known_degraded_payload_and_uses_confirm_demo(self) -> None:
         task_json = {
             "task_id": "mon_pnl_demo",
@@ -1986,6 +2240,55 @@ class MonitorTaskTests(unittest.TestCase):
         self.assertIn("task_confirmed", [event["event_type"] for event in events])
         self.assertIn("task_cancelled", [event["event_type"] for event in events])
         self.assertNotIn("live_order_submitted", [event["event_type"] for event in events])
+
+    def test_confirm_and_run_live_loop_accepts_order_baseline_monitor(self) -> None:
+        task_json = {
+            "task_id": "mon_order_baseline_combined",
+            "task_type": "order_baseline_pnl_monitor",
+            "profile": "demo",
+            "trading_mode": "live",
+            "symbol": "BTCUSDT",
+            "position_side": "LONG",
+            "frequency_seconds": 3,
+            "baseline": {"entry_price": "70000", "quantity": "0.01"},
+            "condition": {
+                "metric": "baseline_unrealized_pnl",
+                "operator": ">",
+                "threshold": "100",
+            },
+            "action": {
+                "type": "market_close",
+                "target": "LONG",
+            },
+            "callback": {"type": "current_thread"},
+        }
+        account_payload = {
+            "positions": [{"symbol": "BTCUSDT", "side": "LONG", "quantity": "0.05"}],
+            "market_snapshot": {"current_price": "70010"},
+            "degraded_reasons": [],
+            "partial": False,
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with mock.patch.dict(os.environ, {"WEEX_MONITOR_SKILL_HOME": tempdir}, clear=False):
+                with mock.patch.object(monitor, "_run_json_command", return_value=account_payload):
+                    prepared = monitor.prepare_live_confirmation(task_json, duration_seconds=3, now_ms=1000)
+                with mock.patch.object(monitor, "_run_json_command", return_value=account_payload) as runner:
+                    result = monitor.confirm_and_run_live_loop(
+                        prepared["task"],
+                        confirm_monitor=True,
+                        confirmation_token=prepared["confirmation_token"],
+                        confirm_live=True,
+                        duration_seconds=3,
+                        sleep_seconds=0,
+                        now_ms=2000,
+                    )
+                tasks = monitor.load_tasks()
+
+        self.assertEqual(result["confirmed_task"]["status"], "cancelled")
+        self.assertEqual(result["loop_result"]["submitted_count"], 0)
+        self.assertEqual(tasks[0]["status"], "cancelled")
+        self.assertEqual(runner.call_count, 1)
 
     def test_confirm_and_run_live_loop_requires_finite_duration_before_activation(self) -> None:
         task_json = {

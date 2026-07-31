@@ -13,9 +13,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 NOISE_DIR_NAMES = {"__pycache__", ".pytest_cache", ".git"}
 NOISE_FILE_NAMES = {".DS_Store"}
 NOISE_FILE_SUFFIXES = {".pyc"}
-DEFAULT_SKILLS = ("weex-trader-skill", "weex-analysis-skill", "weex-monitor-skill")
+DEFAULT_SKILLS = ("weex-trader-skill", "weex-analysis-skill", "weex-monitor-skill", "weex-partner-skill")
 SKILL_DEPENDENCIES = {
     "weex-monitor-skill": ("weex-trader-skill",),
+    "weex-partner-skill": ("weex-trader-skill",),
 }
 SUPPORTED_AGENTS = {
     "github-copilot",
@@ -27,7 +28,7 @@ SUPPORTED_AGENTS = {
 }
 AGENT_HINTS = {
     "claude": "Use --agent claude-code for Claude Code.",
-    "openclaw": "Openclaw is not supported by gh skill install --agent; use --dir for an Openclaw skills directory if that host expects one.",
+    "openclaw": "OpenClaw requires its native 'openclaw skills install' command; install trader before partner.",
 }
 ROOT_METADATA_FILES = (
     Path("README.md"),
@@ -43,16 +44,31 @@ def discover_skills() -> tuple[str, ...]:
     return tuple(names)
 
 
+def order_skills_with_dependencies(skills: tuple[str, ...]) -> tuple[str, ...]:
+    ordered: list[str] = []
+    visiting: set[str] = set()
+
+    def visit(skill: str) -> None:
+        if skill in ordered:
+            return
+        if skill in visiting:
+            raise SystemExit(f"Cyclic skill dependency detected at {skill}")
+        visiting.add(skill)
+        for dependency in SKILL_DEPENDENCIES.get(skill, ()):
+            visit(dependency)
+        visiting.remove(skill)
+        ordered.append(skill)
+
+    for skill in skills:
+        visit(skill)
+    return tuple(ordered)
+
+
 def resolve_skills(args: argparse.Namespace) -> tuple[str, ...]:
     if args.all:
-        return discover_skills()
+        return order_skills_with_dependencies(discover_skills())
     if args.skill:
-        selected = list(args.skill)
-        for skill in list(selected):
-            for dependency in SKILL_DEPENDENCIES.get(skill, ()):
-                if dependency not in selected:
-                    selected.insert(0, dependency)
-        return tuple(dict.fromkeys(selected))
+        return order_skills_with_dependencies(tuple(dict.fromkeys(args.skill)))
     return DEFAULT_SKILLS
 
 

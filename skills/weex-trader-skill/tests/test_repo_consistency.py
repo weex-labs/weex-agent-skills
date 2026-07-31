@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import io
 import json
 import re
@@ -41,6 +42,9 @@ LINUX_VAULT_REFERENCE = ROOT / "references" / "linux-vault.md"
 TROUBLESHOOTING_REFERENCE = ROOT / "references" / "troubleshooting.md"
 TRADE_DATA_SCHEMA_REFERENCE = ROOT / "references" / "trade-data-schema.md"
 CONTRACT_API_DEFINITIONS_REFERENCE = ROOT / "references" / "contract-api-definitions.md"
+PARTNER_API_DEFINITIONS = ROOT / "references" / "partner-api-definitions.json"
+SPOT_API_DEFINITIONS = ROOT / "references" / "spot-api-definitions.json"
+SPOT_API_DEFINITIONS_MD = ROOT / "references" / "spot-api-definitions.md"
 CONTRACT_API_SCRIPT = ROOT / "scripts" / "weex_contract_api.py"
 TRADE_DATA_AGGREGATOR_SCRIPT = ROOT / "scripts" / "weex_trade_data_aggregator.py"
 TRADE_GUARD_SCRIPT = ROOT / "scripts" / "weex_trade_guard.py"
@@ -148,7 +152,77 @@ def extract_shell_comments(path: Path) -> list[str]:
     return comments
 
 
+def load_api_definition_generator():
+    spec = importlib.util.spec_from_file_location(
+        "generate_weex_api_definitions",
+        API_DEFINITION_GENERATOR,
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError("unable to load API definition generator")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 class RepoConsistencyTests(unittest.TestCase):
+    def test_internal_withdrawal_status_is_removed_and_cannot_be_regenerated(self) -> None:
+        removed_key = "spot.rebate.get_internal_withdrawal_status"
+        removed_path = "/api/v3/rebate/affiliate/getInternalWithdrawalStatus"
+        removed_doc = (
+            "https://www.weex.com/api-doc/spot/rebate-endpoints/"
+            "GetInternalWithdrawalStatus"
+        )
+        kept_doc = (
+            "https://www.weex.com/api-doc/spot/rebate-endpoints/"
+            "GetAffiliateCommission"
+        )
+        partner = json.loads(PARTNER_API_DEFINITIONS.read_text(encoding="utf-8"))
+        spot = json.loads(SPOT_API_DEFINITIONS.read_text(encoding="utf-8"))
+        spot_md = SPOT_API_DEFINITIONS_MD.read_text(encoding="utf-8")
+        spot_by_key = {item["key"]: item for item in spot["definitions"]}
+
+        self.assertNotIn(
+            "partner.get-internal-withdrawal-status",
+            {item["key"] for item in partner["definitions"]},
+        )
+        self.assertEqual(len(spot_by_key), 32)
+        self.assertNotIn(removed_key, spot_by_key)
+        self.assertNotIn(removed_path, spot_md)
+        kept_write = spot_by_key["spot.rebate.internal_withdrawal"]
+        self.assertEqual(kept_write["method"], "POST")
+        self.assertEqual(
+            kept_write["path"],
+            "/api/v3/rebate/affiliate/internalWithdrawal",
+        )
+
+        generator = load_api_definition_generator()
+        generated_urls = generator.iter_doc_urls("spot", [removed_doc, kept_doc])
+        self.assertNotIn(removed_doc, generated_urls)
+        self.assertIn(kept_doc, generated_urls)
+
+    def test_partner_origin_policy_is_structured_and_documented(self) -> None:
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        file_index = json.loads(FILE_INDEX.read_text(encoding="utf-8"))
+        definitions = json.loads(PARTNER_API_DEFINITIONS.read_text(encoding="utf-8"))
+        policy = manifest["routing"]["domains"]["partner"]["origin_policy"]
+
+        self.assertEqual(policy["production_default"], "https://api-spot.weex.com")
+        self.assertEqual(policy["saved_profile_test_pattern"], "https://*.weex.tech")
+        self.assertEqual(policy["environment_overrides"], "forbidden")
+        self.assertEqual(policy["authenticated_redirects"], "forbidden")
+        self.assertEqual(definitions["base_url"], policy["production_default"])
+        self.assertEqual(
+            definitions["saved_profile_test_origin_pattern"],
+            policy["saved_profile_test_pattern"],
+        )
+        partner_role = file_index["file_guide"]["scripts/weex_partner_api.py"]["role"]
+        self.assertIn("saved HTTPS `*.weex.tech`", partner_role)
+        skill_text = SKILL.read_text(encoding="utf-8")
+        self.assertIn("`partner_production`", skill_text)
+        self.assertIn("`partner_test`", skill_text)
+        self.assertIn("`https://*.weex.tech`", skill_text)
+
     def test_docs_and_comments_do_not_contain_cjk_text(self) -> None:
         markdown_files = sorted(ROOT.rglob("*.md"))
         python_files = sorted((ROOT / "scripts").glob("*.py")) + sorted((ROOT / "tests").glob("*.py"))
@@ -234,6 +308,20 @@ class RepoConsistencyTests(unittest.TestCase):
 
         self.assertEqual(skill_name, manifest["identity"]["name"])
         self.assertEqual(manifest["identity"]["source_of_truth"], "SKILL.md")
+
+    def test_skill_requires_numbered_profile_choice_when_account_is_ambiguous(self) -> None:
+        skill_text = SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("cannot resolve one unique saved profile", skill_text)
+        self.assertIn("numbered list", skill_text)
+        self.assertIn("profile display names only", skill_text)
+        self.assertIn("reply with either the number or the exact profile name", skill_text)
+        self.assertIn("standalone question", skill_text)
+        self.assertIn("Do not guess", skill_text)
+        self.assertIn("most recent numbered list", skill_text)
+        self.assertIn("out-of-range or stale number", skill_text)
+        self.assertIn("show the current choices again", skill_text)
+        self.assertIn("reuse that saved profile for later turns in the same conversation", skill_text)
 
     def test_skill_documents_localized_user_facing_trading_mode_labels(self) -> None:
         skill_text = SKILL.read_text(encoding="utf-8")
@@ -406,15 +494,17 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIn("--skill weex-monitor-skill", workflow_text)
         self.assertIn("gh skill publish --dry-run", workflow_text)
 
-    def test_root_readme_describes_three_skills_including_monitor(self) -> None:
+    def test_root_readme_describes_four_skills_including_partner(self) -> None:
         readme_text = REPO_README.read_text(encoding="utf-8")
         zh_readme_text = (REPO_ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
 
-        self.assertIn("The Three Skills", readme_text)
+        self.assertIn("The Four Skills", readme_text)
         self.assertIn("weex-monitor-skill", readme_text)
+        self.assertIn("weex-partner-skill", readme_text)
         self.assertIn("automated monitor", readme_text.lower())
-        self.assertIn("三个 Skill", zh_readme_text)
+        self.assertIn("四个 Skill", zh_readme_text)
         self.assertIn("weex-monitor-skill", zh_readme_text)
+        self.assertIn("weex-partner-skill", zh_readme_text)
         self.assertIn("自动化监控", zh_readme_text)
 
     def test_machine_readable_metadata_describes_application_vault_consistently(self) -> None:

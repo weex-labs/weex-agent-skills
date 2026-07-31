@@ -93,6 +93,7 @@ class InstallLocalSkillsTests(unittest.TestCase):
         self.assertIn("weex-trader-skill", installer.DEFAULT_SKILLS)
         self.assertIn("weex-analysis-skill", installer.DEFAULT_SKILLS)
         self.assertIn("weex-monitor-skill", installer.DEFAULT_SKILLS)
+        self.assertIn("weex-partner-skill", installer.DEFAULT_SKILLS)
 
     def test_monitor_skill_install_includes_trader_dependency(self) -> None:
         args = installer.build_parser().parse_args(["--skill", "weex-monitor-skill"])
@@ -101,6 +102,21 @@ class InstallLocalSkillsTests(unittest.TestCase):
             installer.resolve_skills(args),
             ("weex-trader-skill", "weex-monitor-skill"),
         )
+
+    def test_partner_skill_install_includes_trader_dependency(self) -> None:
+        args = installer.build_parser().parse_args(["--skill", "weex-partner-skill"])
+
+        self.assertEqual(
+            installer.resolve_skills(args),
+            ("weex-trader-skill", "weex-partner-skill"),
+        )
+
+    def test_all_install_orders_dependencies_before_dependents(self) -> None:
+        args = installer.build_parser().parse_args(["--all"])
+        skills = installer.resolve_skills(args)
+
+        self.assertLess(skills.index("weex-trader-skill"), skills.index("weex-partner-skill"))
+        self.assertLess(skills.index("weex-trader-skill"), skills.index("weex-monitor-skill"))
 
     def test_invalid_agent_is_rejected_before_printing_dry_run_command(self) -> None:
         with self.assertRaisesRegex(SystemExit, "Unsupported agent"):

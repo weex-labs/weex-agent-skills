@@ -1,0 +1,790 @@
+{
+  "schema_version": 2,
+  "contract_version": "partner-v3-2026-06-22",
+  "last_verified_utc": "2026-07-28",
+  "authority": "WEEX official Chinese and English Partner API request and response parameter tables",
+  "operations": {
+    "list-referral-uids": {
+      "endpoint": "partner.get-affiliate-uids",
+      "official_name_zh": "获取代理邀请用户的UID列表",
+      "official_name_en": "Get Affiliate UIDs",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetAffiliateUIDs",
+      "doc_url_en": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateUIDs",
+      "request_fields": [
+        {
+          "wire_name": "uid",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "被邀请用户的UID",
+          "official_description_en": "Invited User UID"
+        },
+        {
+          "wire_name": "startTime",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "开始时间戳(UTC毫秒)。必须在最近1年内，未传则默认取结束时间向前90天。",
+          "official_description_en": "Start timestamp in UTC (milliseconds). Must fall within the past 1 year; defaults to 90 days prior to endTime when omitted."
+        },
+        {
+          "wire_name": "endTime",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "结束时间戳(UTC毫秒)。必须大于开始时间，查询区间不得超过90天。",
+          "official_description_en": "End timestamp in UTC (milliseconds). Must be greater than startTime; total range cannot exceed 90 days."
+        },
+        {
+          "wire_name": "page",
+          "type": "Integer",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "页码(从1开始，默认1)",
+          "official_description_en": "Page number (starting from 1, default 1)"
+        },
+        {
+          "wire_name": "pageSize",
+          "type": "Integer",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "每页数量(默认100)",
+          "official_description_en": "Page size (default 100)"
+        }
+      ],
+      "response_fields": [
+        {
+          "wire_name": "uid",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "被邀请用户UID",
+          "official_description_en": "Invited User UID"
+        },
+        {
+          "wire_name": "registerTime",
+          "type": "Long",
+          "role": "record",
+          "format": "millisecond_timestamp",
+          "official_description_zh": "注册时间戳(单位：毫秒)",
+          "official_description_en": "Registration timestamp, unit: milliseconds"
+        },
+        {
+          "wire_name": "kycResult",
+          "type": "Boolean",
+          "role": "record",
+          "official_description_zh": "KYC认证状态",
+          "official_description_en": "KYC status"
+        },
+        {
+          "wire_name": "inviteCode",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "邀请码",
+          "official_description_en": "Invitation Code"
+        },
+        {
+          "wire_name": "firstDeposit",
+          "type": "Long",
+          "role": "record",
+          "format": "millisecond_timestamp",
+          "official_description_zh": "首次入金时间(毫秒)",
+          "official_description_en": "First deposit time (milliseconds)"
+        },
+        {
+          "wire_name": "firstTrade",
+          "type": "Long",
+          "role": "record",
+          "format": "millisecond_timestamp",
+          "official_description_zh": "首次交易时间(毫秒)",
+          "official_description_en": "First trade time (milliseconds)"
+        },
+        {
+          "wire_name": "lastDeposit",
+          "type": "Long",
+          "role": "record",
+          "format": "millisecond_timestamp",
+          "official_description_zh": "最近一次入金时间(毫秒)",
+          "official_description_en": "Latest deposit time (milliseconds)"
+        },
+        {
+          "wire_name": "lastTrade",
+          "type": "Long",
+          "role": "record",
+          "format": "millisecond_timestamp",
+          "official_description_zh": "最近一次交易时间(毫秒)",
+          "official_description_en": "Latest trade time (milliseconds)"
+        },
+        {
+          "wire_name": "channelUserInfoItemList",
+          "type": "Array",
+          "role": "records_container",
+          "official_description_zh": "代理用户明细列表",
+          "official_description_en": "Affiliate user items"
+        },
+        {
+          "wire_name": "pages",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "总页数",
+          "official_description_en": "Total pages"
+        },
+        {
+          "wire_name": "pageSize",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "每页数量",
+          "official_description_en": "Page size"
+        },
+        {
+          "wire_name": "total",
+          "type": "Long",
+          "role": "pagination",
+          "official_description_zh": "总记录数",
+          "official_description_en": "Total records"
+        }
+      ]
+    },
+    "get-direct-trade-asset": {
+      "endpoint": "partner.get-channel-user-trade-and-asset",
+      "official_name_zh": "获取代理的直客交易与资金统计",
+      "official_name_en": "Get Affiliate Referral Data",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetChannelUserTradeAndAsset",
+      "doc_url_en": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetChannelUserTradeAndAsset",
+      "request_fields": [
+        {
+          "wire_name": "uid",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "被邀请用户的UID",
+          "official_description_en": "Invited User UID"
+        },
+        {
+          "wire_name": "startTime",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "开始时间戳(UTC毫秒)",
+          "official_description_en": "Start timestamp in UTC (milliseconds)"
+        },
+        {
+          "wire_name": "endTime",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "结束时间戳(UTC毫秒)",
+          "official_description_en": "End timestamp in UTC (milliseconds)"
+        },
+        {
+          "wire_name": "page",
+          "type": "Integer",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "页码(从1开始，默认1)",
+          "official_description_en": "Page number (starting from 1, default 1)"
+        },
+        {
+          "wire_name": "pageSize",
+          "type": "Integer",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "每页数量(默认100)",
+          "official_description_en": "Page size (default 100)"
+        }
+      ],
+      "response_fields": [
+        {
+          "wire_name": "uid",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "被邀请用户UID",
+          "official_description_en": "Invited User UID"
+        },
+        {
+          "wire_name": "depositAmount",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "入金量",
+          "official_description_en": "Deposit Amount"
+        },
+        {
+          "wire_name": "withdrawalAmount",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "出金量",
+          "official_description_en": "Withdrawal Amount"
+        },
+        {
+          "wire_name": "spotTradingAmount",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "现货交易量",
+          "official_description_en": "Spot Trading Volume"
+        },
+        {
+          "wire_name": "futuresTradingAmount",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "合约交易量",
+          "official_description_en": "Futures Trading Volume"
+        },
+        {
+          "wire_name": "commission",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "佣金",
+          "official_description_en": "Commission"
+        },
+        {
+          "wire_name": "records",
+          "type": "Array",
+          "role": "records_container",
+          "official_description_zh": "统计记录列表",
+          "official_description_en": "Aggregated records"
+        },
+        {
+          "wire_name": "pages",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "总页数",
+          "official_description_en": "Total pages"
+        },
+        {
+          "wire_name": "pageSize",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "每页数量",
+          "official_description_en": "Page size"
+        },
+        {
+          "wire_name": "total",
+          "type": "Long",
+          "role": "pagination",
+          "official_description_zh": "总记录数",
+          "official_description_en": "Total records"
+        }
+      ]
+    },
+    "get-commission": {
+      "endpoint": "partner.get-affiliate-commission",
+      "official_name_zh": "获取代理返佣记录",
+      "official_name_en": "Get Affiliate Commission",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetAffiliateCommission",
+      "doc_url_en": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateCommission",
+      "request_fields": [
+        {
+          "wire_name": "uid",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "被邀请用户UID",
+          "official_description_en": "Invited User UID"
+        },
+        {
+          "wire_name": "startTime",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "开始时间戳(UTC毫秒,默认七天，最大3个月)",
+          "official_description_en": "Start timestamp in UTC (milliseconds). Default: 7 days ago,Max range: 3 months"
+        },
+        {
+          "wire_name": "endTime",
+          "type": "Long",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "结束时间戳(UTC毫秒,默认当前时间，最大3个月)",
+          "official_description_en": "End timestamp in UTC (milliseconds). Default: current time,Max range: 3 months"
+        },
+        {
+          "wire_name": "coin",
+          "internal_name": "coin",
+          "type": "String",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "币种类型(USDT或BTC)",
+          "official_description_en": "USDT or BTC"
+        },
+        {
+          "wire_name": "productType",
+          "internal_name": "product_type",
+          "type": "String",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "产品类型(SPOT或FUTURES，默认SPOT)",
+          "official_description_en": "SPOT or FUTURES (default SPOT)"
+        },
+        {
+          "wire_name": "page",
+          "type": "Integer",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "页码(从1开始，默认1)",
+          "official_description_en": "Page number (starting from 1, default 1)"
+        },
+        {
+          "wire_name": "pageSize",
+          "type": "Integer",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "每页数量(默认100)",
+          "official_description_en": "Page size (default 100)"
+        }
+      ],
+      "response_fields": [
+        {
+          "wire_name": "uid",
+          "type": "Long",
+          "role": "record",
+          "official_description_zh": "被邀请用户UID",
+          "official_description_en": "Invited User UID"
+        },
+        {
+          "wire_name": "date",
+          "type": "Long",
+          "role": "record",
+          "format": "millisecond_timestamp",
+          "official_description_zh": "佣金时间戳(单位：毫秒)",
+          "official_description_en": "Commission timestamp, unit: milliseconds"
+        },
+        {
+          "wire_name": "coin",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "币种类型(USDT, BTC等)",
+          "official_description_en": "USDT, BTC ..."
+        },
+        {
+          "wire_name": "fee",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "净交易手续费",
+          "official_description_en": "Net Trading Fee"
+        },
+        {
+          "wire_name": "commission",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "已支付佣金",
+          "official_description_en": "Paid Commission"
+        },
+        {
+          "wire_name": "rate",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "返佣比例",
+          "official_description_en": "Rebate Rate"
+        },
+        {
+          "wire_name": "productType",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "产品类型(SPOT/FUTURES)",
+          "official_description_en": "Product Type"
+        },
+        {
+          "wire_name": "symbol",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "交易对",
+          "official_description_en": "Trading Pair"
+        },
+        {
+          "wire_name": "sourceType",
+          "type": "Integer",
+          "role": "record",
+          "official_description_zh": "1：直客、2：子代理",
+          "official_description_en": "1: Direct Client, 2: Sub-agent"
+        },
+        {
+          "wire_name": "takerAmount",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "taker金额(交易量)",
+          "official_description_en": "Taker Amount (Trading Volume)"
+        },
+        {
+          "wire_name": "makerAmount",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "maker金额(交易量)",
+          "official_description_en": "Maker Amount (Trading Volume)"
+        },
+        {
+          "wire_name": "channelCommissionInfoItems",
+          "type": "Array",
+          "role": "records_container",
+          "official_description_zh": "返佣记录列表",
+          "official_description_en": "Commission records"
+        },
+        {
+          "wire_name": "pages",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "总页数",
+          "official_description_en": "Total pages"
+        },
+        {
+          "wire_name": "pageSize",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "每页数量",
+          "official_description_en": "Page size"
+        },
+        {
+          "wire_name": "total",
+          "type": "Long",
+          "role": "pagination",
+          "official_description_zh": "总记录数",
+          "official_description_en": "Total records"
+        }
+      ]
+    },
+    "get-sub-agent-stats": {
+      "endpoint": "partner.query-sub-channel-transactions",
+      "official_name_zh": "查询子代理数据（代理账户）",
+      "official_name_en": "Get Subaffiliates Data (affiliate only)",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/QuerySubChannelTransactions",
+      "doc_url_en": "https://www.weex.com/api-doc/partner/rebate-endpoints/QuerySubChannelTransactions",
+      "request_fields": [
+        {
+          "wire_name": "subUid",
+          "type": "Long",
+          "official_required": false,
+          "transport": "body",
+          "official_description_zh": "子代理的UID",
+          "official_description_en": "Sub-affiliate's UID"
+        },
+        {
+          "wire_name": "startTime",
+          "type": "Long",
+          "official_required": false,
+          "skill_required": "production_only",
+          "transport": "body",
+          "official_description_zh": "开始时间戳(UTC毫秒)",
+          "official_description_en": "Start timestamp (UTC milliseconds)"
+        },
+        {
+          "wire_name": "endTime",
+          "type": "Long",
+          "official_required": false,
+          "skill_required": "production_only",
+          "transport": "body",
+          "official_description_zh": "结束时间戳(UTC毫秒)",
+          "official_description_en": "End timestamp (UTC milliseconds)"
+        },
+        {
+          "wire_name": "productType",
+          "internal_name": "product_type",
+          "type": "String",
+          "official_required": true,
+          "skill_required": true,
+          "transport": "body",
+          "official_description_zh": "产品类型(SPOT或FUTURES)",
+          "official_description_en": "Product type (SPOT or FUTURES)"
+        },
+        {
+          "wire_name": "pageNum",
+          "type": "Integer",
+          "official_required": false,
+          "transport": "body",
+          "official_description_zh": "页码(从1开始，默认1)",
+          "official_description_en": "Page number (starts from 1, default 1)"
+        },
+        {
+          "wire_name": "pageSize",
+          "type": "Integer",
+          "official_required": false,
+          "transport": "body",
+          "official_description_zh": "每页数量(默认100)",
+          "official_description_en": "Items per page (default 100)"
+        }
+      ],
+      "response_fields": [
+        {
+          "wire_name": "subAffiliateUid",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "子代理id",
+          "official_description_en": "Sub-affiliate ID"
+        },
+        {
+          "wire_name": "productType",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "产品类型",
+          "official_description_en": "Product Type"
+        },
+        {
+          "wire_name": "date",
+          "type": "String",
+          "role": "record",
+          "format": "date",
+          "official_description_zh": "日期",
+          "official_description_en": "Date"
+        },
+        {
+          "wire_name": "tradingVolume",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "总交易量",
+          "official_description_en": "Total Trading Volume"
+        },
+        {
+          "wire_name": "netTradingFee",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "平台实际收取的净交易手续费",
+          "official_description_en": "Net Trading Fee Collected by Platform"
+        },
+        {
+          "wire_name": "paidCommission",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "实际的返佣金额",
+          "official_description_en": "Actual Rebate Amount"
+        },
+        {
+          "wire_name": "records",
+          "type": "Array",
+          "role": "records_container",
+          "official_description_zh": "子代理数据列表",
+          "official_description_en": "Sub-affiliate records"
+        },
+        {
+          "wire_name": "total",
+          "type": "Long",
+          "role": "pagination",
+          "official_description_zh": "总记录数",
+          "official_description_en": "Total records"
+        },
+        {
+          "wire_name": "size",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "每页数量",
+          "official_description_en": "Page size"
+        },
+        {
+          "wire_name": "current",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "当前页码",
+          "official_description_en": "Current page"
+        },
+        {
+          "wire_name": "pages",
+          "type": "Integer",
+          "role": "pagination",
+          "official_description_zh": "总页数",
+          "official_description_en": "Total pages"
+        }
+      ]
+    },
+    "verify-referrals": {
+      "endpoint": "partner.verify-referrals",
+      "official_name_zh": "校验下级直客关系",
+      "official_name_en": "Verify Referrals",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/VerifyReferrals",
+      "doc_url_en": "https://www.weex.com/api-doc/partner/rebate-endpoints/VerifyReferrals",
+      "request_fields": [
+        {
+          "wire_name": "userIds",
+          "type": "String",
+          "official_required": true,
+          "skill_required": true,
+          "transport": "query",
+          "official_description_zh": "需要校验的 UID 列表，使用英文逗号分隔，例如 12345,67890。单次最多 100 个。",
+          "official_description_en": "Comma-separated UID list (for example 12345,67890). Supports up to 100 UIDs per call."
+        }
+      ],
+      "response_fields": [
+        {
+          "wire_name": "uid",
+          "type": "Long",
+          "role": "record",
+          "official_description_zh": "被校验的 UID",
+          "official_description_en": "UID that was checked"
+        },
+        {
+          "wire_name": "isRefferal",
+          "output_name": "is_referral",
+          "alias_kind": "normalized_output",
+          "type": "Boolean",
+          "role": "record",
+          "official_description_zh": "true 表示该 UID 属于当前代理的直客",
+          "official_description_en": "true if the UID belongs to the current affiliate"
+        }
+      ]
+    },
+    "get-referral-assets": {
+      "endpoint": "partner.get-referral-assets",
+      "official_name_zh": "查询下级资产快照",
+      "official_name_en": "Get Affiliate Member Assets",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetAffiliateAssets",
+      "doc_url_en": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateAssets",
+      "request_fields": [
+        {
+          "wire_name": "userId",
+          "type": "Long",
+          "official_required": true,
+          "skill_required": true,
+          "transport": "query",
+          "official_description_zh": "直客 UID",
+          "official_description_en": "Direct customer UID"
+        },
+        {
+          "wire_name": "startTime",
+          "type": "String",
+          "official_required": false,
+          "skill_required": true,
+          "transport": "query",
+          "official_description_zh": "起始时间（UTC，格式 yyyy-MM-dd）",
+          "official_description_en": "Optional start time (UTC, format yyyy-MM-dd)"
+        },
+        {
+          "wire_name": "endTime",
+          "type": "String",
+          "official_required": false,
+          "skill_required": true,
+          "transport": "query",
+          "official_description_zh": "结束时间（UTC，格式 yyyy-MM-dd，默认当前时间）",
+          "official_description_en": "Optional end time (UTC, format yyyy-MM-dd, defaults to current if absent)"
+        }
+      ],
+      "response_fields": [
+        {
+          "wire_name": "availableBalance",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "可用余额（USDT）",
+          "official_description_en": "Available balance in USDT"
+        },
+        {
+          "wire_name": "fundingTotalUsdt",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "资金账户权益（USDT）",
+          "official_description_en": "Total funding account equity in USDT"
+        },
+        {
+          "wire_name": "spotProTotalUsdt",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "现货账户权益（USDT）",
+          "official_description_en": "Total spot account equity in USDT"
+        },
+        {
+          "wire_name": "unimarginTotalUsdt",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "合约账户权益（USDT）",
+          "official_description_en": "Total contract account equity in USDT"
+        },
+        {
+          "wire_name": "depositTotalAmount",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "指定时间范围内的累计入金金额",
+          "official_description_en": "Cumulative deposit amount within the time window"
+        },
+        {
+          "wire_name": "depositList",
+          "type": "Array",
+          "role": "record",
+          "format": "hidden_container",
+          "official_description_zh": "入金明细列表",
+          "official_description_en": "Deposit records"
+        }
+      ]
+    },
+    "get-referral-deal-data": {
+      "endpoint": "partner.get-referral-deal-data",
+      "official_name_zh": "查询下级交易统计",
+      "official_name_en": "Get Affiliate Deal Data",
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetAffiliateDealData",
+      "doc_url_en": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateDealData",
+      "request_fields": [
+        {
+          "wire_name": "userIds",
+          "type": "List<Long>",
+          "official_required": false,
+          "transport": "query",
+          "official_description_zh": "可重复传递的查询参数，默认查询全部直客",
+          "official_description_en": "Optional repeated query parameter (e.g. userIds=123&userIds=456). Defaults to all direct users"
+        },
+        {
+          "wire_name": "startTime",
+          "type": "String",
+          "official_required": false,
+          "skill_required": true,
+          "transport": "query",
+          "official_description_zh": "开始日期（UTC，格式 yyyy-MM-dd）",
+          "official_description_en": "Filter start date (UTC, format yyyy-MM-dd)"
+        },
+        {
+          "wire_name": "endTime",
+          "type": "String",
+          "official_required": false,
+          "skill_required": true,
+          "transport": "query",
+          "official_description_zh": "结束日期（UTC，格式 yyyy-MM-dd）",
+          "official_description_en": "Filter end date (UTC, format yyyy-MM-dd)"
+        }
+      ],
+      "response_fields": [
+        {
+          "wire_name": "userId",
+          "type": "Long",
+          "role": "record",
+          "official_description_zh": "直客 UID",
+          "official_description_en": "UID of the queried customer"
+        },
+        {
+          "wire_name": "spotDealAmountUsdt",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "现货交易量（USDT）",
+          "official_description_en": "Spot trading volume (USDT)"
+        },
+        {
+          "wire_name": "futuresProDealAmountUsdt",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "合约交易量（USDT）",
+          "official_description_en": "Futures trading volume (USDT)"
+        },
+        {
+          "wire_name": "spotProDealAmountUsdtTemp",
+          "type": "String",
+          "role": "record",
+          "official_description_zh": "现货交易量原始值",
+          "official_description_en": "Spot trading volume (raw value returned by partner system)"
+        },
+        {
+          "wire_name": "data",
+          "type": "Array",
+          "role": "records_container",
+          "official_description_zh": "上游返回的交易统计数据列表",
+          "official_description_en": "Trading statistics returned by the upstream service"
+        },
+        {
+          "wire_name": "startTime",
+          "type": "String",
+          "role": "query_echo",
+          "format": "date",
+          "official_description_zh": "本次查询使用的开始日期（yyyy-MM-dd）",
+          "official_description_en": "Start date applied by the upstream service (yyyy-MM-dd)"
+        },
+        {
+          "wire_name": "endTime",
+          "type": "String",
+          "role": "query_echo",
+          "format": "date",
+          "official_description_zh": "本次查询使用的结束日期（yyyy-MM-dd）",
+          "official_description_en": "End date applied by the upstream service (yyyy-MM-dd)"
+        }
+      ]
+    }
+  }
+}

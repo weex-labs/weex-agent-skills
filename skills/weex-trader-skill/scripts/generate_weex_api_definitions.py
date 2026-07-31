@@ -42,6 +42,10 @@ KEY_OVERRIDES = {
     ("spot", "GetAllProductInfo"): "spot.config.get_api_trading_symbols",
 }
 
+EXCLUDED_DOC_URLS = {
+    "https://www.weex.com/api-doc/spot/rebate-endpoints/GetInternalWithdrawalStatus",
+}
+
 
 @dataclass
 class ParsedDoc:
@@ -386,6 +390,8 @@ def iter_doc_urls(product: str, sitemap_urls: Iterable[str]) -> List[str]:
     urls = []
     for url in sitemap_urls:
         if not url.startswith(prefix):
+            continue
+        if url in EXCLUDED_DOC_URLS:
             continue
         if "/V2/" in url or "/zh-CN/" in url:
             continue

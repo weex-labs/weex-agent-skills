@@ -70,6 +70,25 @@
         ],
         "needs_profile_for_private": true
       },
+      "partner": {
+        "entrypoint": "scripts/weex_partner_api.py",
+        "open_first": [
+          "scripts/weex_partner_api.py",
+          "references/partner-api-definitions.json"
+        ],
+        "commands": [
+          "list-endpoints",
+          "execute"
+        ],
+        "needs_profile_for_private": true,
+        "operation_class": "read_only_query",
+        "origin_policy": {
+          "production_default": "https://api-spot.weex.com",
+          "saved_profile_test_pattern": "https://*.weex.tech",
+          "environment_overrides": "forbidden",
+          "authenticated_redirects": "forbidden"
+        }
+      },
       "trade_analysis": {
         "entrypoints": [
           "scripts/weex_trade_data_aggregator.py",
@@ -142,6 +161,11 @@
         "scripts/weex_spot_api.py",
         "scripts/weex_profile_store.py"
       ],
+      "execute an allowlisted Partner query": [
+        "scripts/weex_partner_api.py",
+        "references/partner-api-definitions.json",
+        "scripts/weex_profile_store.py"
+      ],
       "replay or profile trading history": [
         "scripts/weex_trade_data_aggregator.py",
         "references/trade-data-schema.md"
@@ -197,7 +221,7 @@
     ],
     "env_vars": {
       "WEEX_TRADER_SKILL_HOME": "Override the runtime state directory for profiles, vault data, and agent cache.",
-      "WEEX_API_TIMEOUT": "Override HTTP timeout in seconds.",
+      "WEEX_API_TIMEOUT": "Override HTTP timeout in seconds; Partner REST defaults to 30 seconds.",
       "WEEX_ORDER_INTENT_TTL_SECONDS": "Override the pending order confirmation TTL in seconds for trade guard flows.",
       "WEEX_GUI_FORCE_FOREGROUND": "Disable GUI auto-detach and keep the GUI entrypoint attached to the current shell, which can reintroduce a Terminal/cmd window."
     }

@@ -181,6 +181,60 @@ class ProfileManagerLayoutTests(unittest.TestCase):
         profile_app.vault_reset_button.pack.assert_called_once()
         profile_app.vault_reset_button.pack_forget.assert_not_called()
 
+    def test_refresh_vault_status_blocks_account_workspace_until_initialized(self) -> None:
+        profile_app = app.ProfileManagerApp.__new__(app.ProfileManagerApp)
+        profile_app.language = "en"
+        profile_app.local_text = lambda en_text, zh_text: en_text
+        profile_app.backend_var = FakeVar()
+        profile_app.vault_state_var = FakeVar()
+        profile_app.vault_guidance_var = FakeVar()
+        profile_app.profile_actions_enabled = False
+        profile_app.profile_action_hint_var = FakeVar()
+        profile_app.header_var = FakeVar()
+        profile_app.account_lock_eyebrow_var = FakeVar()
+        profile_app.account_lock_title_var = FakeVar()
+        profile_app.account_lock_body_var = FakeVar()
+        profile_app.account_lock_hint_var = FakeVar()
+        profile_app.account_surface_shell = object()
+        profile_app.account_lock_overlay = types.SimpleNamespace(
+            place=mock.Mock(),
+            lift=mock.Mock(),
+            place_forget=mock.Mock(),
+        )
+        profile_app.account_lock_unlock_button = types.SimpleNamespace(
+            configure=mock.Mock(),
+            grid_configure=mock.Mock(),
+        )
+        profile_app.account_lock_reset_button = types.SimpleNamespace(
+            grid=mock.Mock(),
+            grid_remove=mock.Mock(),
+        )
+        profile_app.vault_action_button = types.SimpleNamespace(configure=mock.Mock())
+        profile_app.vault_reset_button = types.SimpleNamespace(pack=mock.Mock(), pack_forget=mock.Mock())
+        profile_app._sync_profile_action_controls = mock.Mock()
+
+        with mock.patch.object(app, "vault_status", return_value={"state": "uninitialized", "mode": "manual_once"}):
+            with mock.patch.object(app, "secure_store_backend_name", return_value="Application Vault (setup required)"):
+                profile_app.refresh_vault_status()
+
+        self.assertTrue(profile_app.account_surface_locked)
+        self.assertEqual(profile_app.account_lock_eyebrow_var.get(), "FIRST-TIME SETUP")
+        self.assertEqual(profile_app.account_lock_title_var.get(), "Set Up Secure Storage")
+        self.assertIn("local encrypted vault", profile_app.account_lock_body_var.get().lower())
+        self.assertEqual(profile_app.account_lock_hint_var.get(), "Set it up once, then unlock only when needed.")
+        profile_app.account_lock_overlay.place.assert_called_once_with(
+            in_=profile_app.account_surface_shell,
+            x=0,
+            y=0,
+            relwidth=1,
+            relheight=1,
+        )
+        profile_app.account_lock_overlay.lift.assert_called_once_with()
+        profile_app.account_lock_unlock_button.configure.assert_called_once_with(text="Start Setup")
+        profile_app.account_lock_unlock_button.grid_configure.assert_called_once_with(sticky="w", padx=(0, 0))
+        profile_app.account_lock_reset_button.grid_remove.assert_called_once_with()
+        profile_app.account_lock_reset_button.grid.assert_not_called()
+
     def test_refresh_vault_status_hides_overlay_when_unlocked(self) -> None:
         profile_app = app.ProfileManagerApp.__new__(app.ProfileManagerApp)
         profile_app.language = "en"
@@ -453,6 +507,18 @@ class ProfileManagerLayoutTests(unittest.TestCase):
         self.assertLess(layout["page_pad_x"], 24)
         self.assertLess(layout["card_pad_x"], 16)
         self.assertGreaterEqual(layout["workspace_min_row_height"], 180)
+
+    def test_compute_layout_metrics_keeps_account_lock_card_compact(self) -> None:
+        desktop_layout = app.compute_layout_metrics(viewport_width=1360, viewport_height=880)
+        minimum_layout = app.compute_layout_metrics(viewport_width=1280, viewport_height=820)
+
+        self.assertEqual(desktop_layout.get("overlay_card_width"), 520)
+        self.assertGreaterEqual(minimum_layout.get("overlay_card_width", 0), 440)
+        self.assertLess(minimum_layout.get("overlay_card_width", 999), 520)
+        self.assertLess(
+            desktop_layout.get("overlay_wraplength", 999),
+            desktop_layout.get("overlay_card_width", 0),
+        )
 
     def test_compute_window_geometry_caps_requested_size_to_screen(self) -> None:
         geometry = app.compute_window_geometry(

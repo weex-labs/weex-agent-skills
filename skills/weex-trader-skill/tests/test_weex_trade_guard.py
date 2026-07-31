@@ -490,6 +490,42 @@ class TradeGuardTests(unittest.TestCase):
         self.assertIn("Order: not returned futures, market open long, quantity not returned.", confirmation["reply_instruction"])
         self.assertNotIn("未返回", confirmation["reply_instruction"])
 
+    def test_preview_order_confirmation_lists_frequency_alert_with_top_warning(self) -> None:
+        confirmation = trade_guard._build_user_confirmation(
+            "zh",
+            environment={"trading_mode": "live", "uses_real_funds": True, "market": "futures"},
+            preview_context={
+                "order_preview": {
+                    "symbol": "BTCUSDT",
+                    "side": "BUY",
+                    "position_side": "LONG",
+                    "order_type": "MARKET",
+                    "quantity": "0.001",
+                    "market": "futures",
+                    "trading_mode": "live",
+                },
+                "alerts": [
+                    {
+                        "type": "missing_tp_sl",
+                        "level": "high",
+                        "reason": "The order is missing take-profit or stop-loss protection.",
+                    },
+                    {
+                        "type": "high_trade_frequency",
+                        "level": "warning",
+                        "reason": "Recent trading frequency is high in the current review window.",
+                    },
+                ],
+            },
+        )
+
+        instruction = confirmation["reply_instruction"]
+        self.assertIn("高风险提示", instruction)
+        self.assertIn("其他风险提示：", instruction)
+        self.assertIn("频繁交易", instruction)
+        self.assertIn("近期交易频率偏高", instruction)
+        self.assertIn("如果确认使用真实资金提交这笔订单，请回复：确认", instruction)
+
     def test_confirm_order_rejects_expired_intent(self) -> None:
         args = mock.Mock(intent_id=None, risk_signature=None, confirm_live=True, pretty=False)
 
@@ -831,6 +867,69 @@ class TradeGuardTests(unittest.TestCase):
         self.assertEqual(result["orderId"], "3001")
         self.assertEqual(prepared_bodies[0]["type"], "LIMIT")
         self.assertEqual(prepared_bodies[0]["timeInForce"], "GTC")
+
+    def test_submit_live_order_forwards_client_order_id_for_spot(self) -> None:
+        prepared_bodies: list[dict[str, object]] = []
+        fake_spot_api = mock.Mock()
+        fake_spot_api.ENDPOINTS = {"place": {"path": "/sapi/v1/order"}}
+        fake_spot_api.find_endpoint_key_by_doc_suffix.return_value = "place"
+        fake_spot_api.normalize_spot_symbol.side_effect = lambda symbol: symbol.upper()
+        fake_client = mock.Mock()
+
+        def prepare_request(endpoint: dict[str, object], query: dict[str, object], body: dict[str, object]) -> dict[str, object]:
+            prepared_bodies.append(body)
+            return {"endpoint": endpoint, "query": query, "body": body}
+
+        fake_client.prepare_request.side_effect = prepare_request
+        fake_client.send.return_value = {"ok": True, "data": {"orderId": "3002"}}
+
+        with mock.patch.object(trade_guard, "_build_spot_client", return_value=(fake_spot_api, fake_client)):
+            result = trade_guard._submit_live_order(
+                market="spot",
+                profile_name="demo",
+                raw_order={
+                    "symbol": "btcusdt",
+                    "side": "BUY",
+                    "type": "MARKET",
+                    "quantity": "0.01",
+                    "new_client_order_id": "spot-client-3002",
+                },
+            )
+
+        self.assertEqual(result["orderId"], "3002")
+        self.assertEqual(prepared_bodies[0].get("newClientOrderId"), "spot-client-3002")
+
+    def test_submit_live_order_generates_client_order_id_for_spot(self) -> None:
+        prepared_bodies: list[dict[str, object]] = []
+        fake_spot_api = mock.Mock()
+        fake_spot_api.ENDPOINTS = {"place": {"path": "/sapi/v1/order"}}
+        fake_spot_api.find_endpoint_key_by_doc_suffix.return_value = "place"
+        fake_spot_api.normalize_spot_symbol.side_effect = lambda symbol: symbol.upper()
+        fake_spot_api.generate_client_order_id.return_value = "codex-generated-3003"
+        fake_client = mock.Mock()
+
+        def prepare_request(endpoint: dict[str, object], query: dict[str, object], body: dict[str, object]) -> dict[str, object]:
+            prepared_bodies.append(body)
+            return {"endpoint": endpoint, "query": query, "body": body}
+
+        fake_client.prepare_request.side_effect = prepare_request
+        fake_client.send.return_value = {"ok": True, "data": {"orderId": "3003"}}
+
+        with mock.patch.object(trade_guard, "_build_spot_client", return_value=(fake_spot_api, fake_client)):
+            result = trade_guard._submit_live_order(
+                market="spot",
+                profile_name="demo",
+                raw_order={
+                    "symbol": "btcusdt",
+                    "side": "BUY",
+                    "type": "MARKET",
+                    "quantity": "0.01",
+                },
+            )
+
+        self.assertEqual(result["orderId"], "3003")
+        self.assertEqual(prepared_bodies[0].get("newClientOrderId"), "codex-generated-3003")
+        fake_spot_api.generate_client_order_id.assert_called_once_with()
 
     def test_submit_live_order_raises_on_missing_position_side_for_futures(self) -> None:
         with mock.patch.object(trade_guard, "_build_contract_client"):

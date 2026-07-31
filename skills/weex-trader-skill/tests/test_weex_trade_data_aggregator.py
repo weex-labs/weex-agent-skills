@@ -14,6 +14,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import weex_trade_data_aggregator as aggregator  # noqa: E402
+import weex_risk_review_core as risk_review  # noqa: E402
 
 
 class WindowSplitTests(unittest.TestCase):
@@ -869,6 +870,125 @@ class ReplayCollectionTests(unittest.TestCase):
         self.assertAlmostEqual(result["tp_sl"]["take_profit_covered_qty"], 0.01)
         self.assertAlmostEqual(result["tp_sl"]["stop_loss_covered_qty"], 0.01)
 
+    def test_collect_order_risk_payload_includes_recent_order_history_for_frequency_alert(self) -> None:
+        now_ms = 1710004200000
+        fetcher = mock.Mock()
+        fetcher.fetch_futures_balance.return_value = {
+            "asset": "USDT",
+            "balance": "1000",
+            "availableBalance": "620",
+        }
+        fetcher.fetch_futures_positions.return_value = []
+        fetcher.fetch_futures_open_orders.return_value = []
+        fetcher.fetch_futures_pending_orders.return_value = []
+        fetcher.fetch_futures_latest_price.return_value = {"symbol": "BTCUSDT", "price": "65000"}
+        fetcher.fetch_futures_orders.return_value = [
+            {
+                "orderId": 100 + index,
+                "symbol": "BTCUSDT",
+                "side": "BUY",
+                "positionSide": "LONG",
+                "type": "MARKET",
+                "status": "FILLED",
+                "origQty": "0.001",
+                "executedQty": "0.001",
+                "time": now_ms - (index * 5 * 60 * 1000),
+            }
+            for index in range(7)
+        ]
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        with mock.patch.object(aggregator.time, "time", return_value=now_ms / 1000):
+            payload = trade_aggregator.collect_order_risk_payload(
+                profile_name="main",
+                market="futures",
+                trading_mode="live",
+                raw_order={
+                    "symbol": "BTCUSDT",
+                    "side": "BUY",
+                    "positionSide": "LONG",
+                    "type": "MARKET",
+                    "quantity": "0.001",
+                },
+            )
+
+        self.assertEqual(len(payload["recent_orders"]), 7)
+        self.assertTrue(
+            hasattr(aggregator, "RECENT_ORDER_LOOKBACK_MS"),
+            "recent order lookback should be a named constant",
+        )
+        fetcher.fetch_futures_orders.assert_called_once_with(
+            profile_name="main",
+            trading_mode="live",
+            start_ms=now_ms - getattr(aggregator, "RECENT_ORDER_LOOKBACK_MS"),
+            end_ms=now_ms,
+            symbol="BTCUSDT",
+        )
+        result = risk_review.analyze_order_risk(payload)
+        self.assertIn("high_trade_frequency", {alert["type"] for alert in result["alerts"]})
+
+    def test_collect_order_risk_payload_marks_partial_when_recent_order_history_is_unavailable(self) -> None:
+        fetcher = mock.Mock()
+        fetcher.fetch_futures_balance.return_value = {
+            "asset": "USDT",
+            "balance": "1000",
+            "availableBalance": "620",
+        }
+        fetcher.fetch_futures_positions.return_value = []
+        fetcher.fetch_futures_open_orders.return_value = []
+        fetcher.fetch_futures_pending_orders.return_value = []
+        fetcher.fetch_futures_latest_price.return_value = {"symbol": "BTCUSDT", "price": "65000"}
+        fetcher.fetch_futures_orders.side_effect = aggregator.AggregationInputError("order history unavailable")
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        try:
+            payload = trade_aggregator.collect_order_risk_payload(
+                profile_name="main",
+                market="futures",
+                trading_mode="live",
+                raw_order={
+                    "symbol": "BTCUSDT",
+                    "side": "BUY",
+                    "positionSide": "LONG",
+                    "type": "MARKET",
+                    "quantity": "0.001",
+                },
+            )
+        except aggregator.AggregationInputError as exc:
+            self.fail(f"order history failure should degrade instead of aborting preview: {exc}")
+
+        self.assertTrue(payload["partial"])
+        self.assertIn(aggregator.RECENT_ORDER_HISTORY_UNAVAILABLE, payload["degraded_reasons"])
+        self.assertEqual(payload["recent_orders"], [])
+
+    def test_collect_account_risk_payload_marks_partial_when_recent_order_history_is_unavailable(self) -> None:
+        fetcher = mock.Mock()
+        fetcher.fetch_futures_balance.return_value = {
+            "asset": "USDT",
+            "balance": "1000",
+            "availableBalance": "620",
+        }
+        fetcher.fetch_futures_positions.return_value = []
+        fetcher.fetch_futures_open_orders.return_value = []
+        fetcher.fetch_futures_pending_orders.return_value = []
+        fetcher.fetch_futures_latest_price.return_value = {"symbol": "BTCUSDT", "price": "65000"}
+        fetcher.fetch_futures_orders.side_effect = aggregator.AggregationInputError("order history unavailable")
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        try:
+            payload = trade_aggregator.collect_account_risk_payload(
+                profile_name="main",
+                market="futures",
+                trading_mode="live",
+                symbol="BTCUSDT",
+            )
+        except aggregator.AggregationInputError as exc:
+            self.fail(f"order history failure should degrade instead of aborting account scan: {exc}")
+
+        self.assertTrue(payload["partial"])
+        self.assertIn(aggregator.RECENT_ORDER_HISTORY_UNAVAILABLE, payload["degraded_reasons"])
+        self.assertEqual(payload["recent_orders"], [])
+
     def test_fetch_futures_open_orders_paginates_all_pages(self) -> None:
         fetcher = aggregator.WeexApiFetcher()
 
@@ -1055,6 +1175,108 @@ class ReplayCollectionTests(unittest.TestCase):
         self.assertAlmostEqual(result["account_snapshot"]["available_balance"], 100.0)
         self.assertEqual(result["market_snapshot"]["current_price"], 3000.0)
         fetcher.fetch_spot_klines.assert_not_called()
+
+    def test_collect_order_risk_payload_includes_recent_spot_order_history_for_frequency_alert(self) -> None:
+        now_ms = 1710004200000
+        fetcher = mock.Mock()
+        fetcher.fetch_spot_balance.return_value = {
+            "balances": [
+                {"asset": "USDT", "free": "1000", "locked": "0"},
+            ]
+        }
+        fetcher.fetch_spot_orders.return_value = [
+            {
+                "orderId": 200 + index,
+                "symbol": "ETHUSDT",
+                "side": "BUY",
+                "type": "MARKET",
+                "status": "FILLED",
+                "origQty": "0.01",
+                "executedQty": "0.01",
+                "time": now_ms - (index * 5 * 60 * 1000),
+            }
+            for index in range(6)
+        ]
+        fetcher.fetch_spot_open_orders.return_value = []
+        fetcher.fetch_spot_latest_price.return_value = {"symbol": "ETHUSDT", "lastPrice": "3000"}
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        with mock.patch.object(aggregator.time, "time", return_value=now_ms / 1000):
+            payload = trade_aggregator.collect_order_risk_payload(
+                profile_name="main",
+                market="spot",
+                raw_order={
+                    "symbol": "ETHUSDT",
+                    "side": "BUY",
+                    "order_type": "MARKET",
+                    "quantity": "0.01",
+                },
+            )
+
+        self.assertEqual(len(payload["recent_orders"]), 6)
+        fetcher.fetch_spot_orders.assert_called_once_with(
+            profile_name="main",
+            start_ms=now_ms - aggregator.RECENT_ORDER_LOOKBACK_MS,
+            end_ms=now_ms,
+            symbol="ETHUSDT",
+        )
+        result = risk_review.analyze_order_risk(payload)
+        self.assertIn("high_trade_frequency", {alert["type"] for alert in result["alerts"]})
+
+    def test_collect_order_risk_payload_marks_partial_when_recent_spot_order_history_is_unavailable(self) -> None:
+        fetcher = mock.Mock()
+        fetcher.fetch_spot_balance.return_value = {
+            "balances": [
+                {"asset": "USDT", "free": "1000", "locked": "0"},
+            ]
+        }
+        fetcher.fetch_spot_orders.side_effect = aggregator.AggregationInputError("spot order history unavailable")
+        fetcher.fetch_spot_open_orders.return_value = []
+        fetcher.fetch_spot_latest_price.return_value = {"symbol": "ETHUSDT", "lastPrice": "3000"}
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        try:
+            payload = trade_aggregator.collect_order_risk_payload(
+                profile_name="main",
+                market="spot",
+                raw_order={
+                    "symbol": "ETHUSDT",
+                    "side": "BUY",
+                    "order_type": "MARKET",
+                    "quantity": "0.01",
+                },
+            )
+        except aggregator.AggregationInputError as exc:
+            self.fail(f"spot order history failure should degrade instead of aborting preview: {exc}")
+
+        self.assertTrue(payload["partial"])
+        self.assertIn(aggregator.RECENT_ORDER_HISTORY_UNAVAILABLE, payload["degraded_reasons"])
+        self.assertEqual(payload["recent_orders"], [])
+
+    def test_collect_account_risk_payload_marks_partial_when_recent_spot_order_history_is_unavailable(self) -> None:
+        fetcher = mock.Mock()
+        fetcher.fetch_spot_balance.return_value = {
+            "balances": [
+                {"asset": "USDT", "free": "1000", "locked": "0"},
+            ]
+        }
+        fetcher.fetch_spot_orders.side_effect = aggregator.AggregationInputError("spot order history unavailable")
+        fetcher.fetch_spot_open_orders.return_value = []
+        fetcher.fetch_spot_latest_price.return_value = {"symbol": "ETHUSDT", "lastPrice": "3000"}
+        trade_aggregator = aggregator.TradeDataAggregator(fetcher=fetcher)
+
+        try:
+            payload = trade_aggregator.collect_account_risk_payload(
+                profile_name="main",
+                market="spot",
+                symbol="ETHUSDT",
+            )
+        except aggregator.AggregationInputError as exc:
+            self.fail(f"spot order history failure should degrade instead of aborting account scan: {exc}")
+
+        self.assertTrue(payload["partial"])
+        self.assertIn(aggregator.RECENT_ORDER_HISTORY_UNAVAILABLE, payload["degraded_reasons"])
+        self.assertEqual(payload["recent_orders"], [])
 
     def test_collect_account_risk_payload_without_symbol_uses_primary_futures_position_price_anchor(self) -> None:
         fetcher = mock.Mock()
@@ -1377,7 +1599,7 @@ class ProfileCollectionTests(unittest.TestCase):
         self.assertEqual(result["fills"][0]["symbol"], "ETHUSDT")
         self.assertEqual(result["sample_quality"], "limited")
 
-    def test_collect_profile_payload_ignores_carry_in_only_counts_for_sample_gate(self) -> None:
+    def test_collect_profile_payload_uses_closed_trade_count_for_sample_gate_when_reconstruction_is_partial(self) -> None:
         trade_aggregator = aggregator.TradeDataAggregator(fetcher=mock.Mock())
         replay_payloads = [
             {
@@ -1408,9 +1630,12 @@ class ProfileCollectionTests(unittest.TestCase):
                 market="futures",
             )
 
-        self.assertEqual(collect_mock.call_count, 2)
-        self.assertEqual(result["selected_period"], "90d")
-        self.assertEqual(result["closed_trade_count"], 12)
+        self.assertEqual(collect_mock.call_count, 1)
+        self.assertEqual(result["selected_period"], "30d")
+        self.assertFalse(result["fallback_applied"])
+        self.assertEqual(result["closed_trade_count"], 10)
+        self.assertEqual(result["raw_closed_trade_count"], 10)
+        self.assertEqual(result["reconstructed_closed_trade_count"], 0)
         self.assertEqual(result["sample_quality"], "limited")
 
     def test_collect_profile_payload_returns_last_window_when_all_candidates_are_minimal(self) -> None:

@@ -15,6 +15,8 @@ from weex_profile_language import resolve_language
 
 DAY_MS = 24 * 60 * 60 * 1000
 HOUR_MS = 60 * 60 * 1000
+RECENT_ORDER_LOOKBACK_MS = HOUR_MS
+RECENT_ORDER_HISTORY_UNAVAILABLE = "recent_order_history_unavailable"
 REPLAY_PERIODS = ("7d", "30d", "90d")
 PROFILE_PERIODS = ("30d", "90d", "180d", "360d")
 COLLECTION_PERIODS = REPLAY_PERIODS + ("180d", "360d")
@@ -680,8 +682,6 @@ def _build_order_risk_tp_sl_state(
 
 
 def _profile_sample_trade_count(payload: dict[str, Any]) -> int:
-    if "reconstructed_closed_trade_count" in payload:
-        return int(payload.get("reconstructed_closed_trade_count") or 0)
     return int(payload.get("closed_trade_count") or 0)
 
 
@@ -1344,6 +1344,70 @@ class TradeDataAggregator:
             raise
         return _normalize_balance_entries(payload, "spot"), False
 
+    def _collect_recent_futures_orders(
+        self,
+        *,
+        profile_name: str,
+        trading_mode: str,
+        start_ms: int,
+        end_ms: int,
+        symbol: str | None,
+        degraded_reasons: list[str],
+        constraints: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        try:
+            payload = self.fetcher.fetch_futures_orders(
+                profile_name=profile_name,
+                trading_mode=trading_mode,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                symbol=symbol,
+            )
+        except Exception as exc:
+            _merge_degraded_reasons(degraded_reasons, [RECENT_ORDER_HISTORY_UNAVAILABLE])
+            _merge_constraints(
+                constraints,
+                [
+                    {
+                        "code": RECENT_ORDER_HISTORY_UNAVAILABLE,
+                        "message": f"Recent order history could not be collected: {exc}",
+                    }
+                ],
+            )
+            return [], True
+        return _normalize_orders(payload, "futures", trading_mode=trading_mode), False
+
+    def _collect_recent_spot_orders(
+        self,
+        *,
+        profile_name: str,
+        start_ms: int,
+        end_ms: int,
+        symbol: str | None,
+        degraded_reasons: list[str],
+        constraints: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        try:
+            payload = self.fetcher.fetch_spot_orders(
+                profile_name=profile_name,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                symbol=symbol,
+            )
+        except Exception as exc:
+            _merge_degraded_reasons(degraded_reasons, [RECENT_ORDER_HISTORY_UNAVAILABLE])
+            _merge_constraints(
+                constraints,
+                [
+                    {
+                        "code": RECENT_ORDER_HISTORY_UNAVAILABLE,
+                        "message": f"Recent spot order history could not be collected: {exc}",
+                    }
+                ],
+            )
+            return [], True
+        return _normalize_orders(payload, "spot"), False
+
     def collect_replay_payload(
         self,
         *,
@@ -1645,6 +1709,7 @@ class TradeDataAggregator:
         }
         partial = False
         degraded_reasons: list[str] = []
+        constraints: list[dict[str, Any]] = []
 
         balances: list[dict[str, Any]] = []
         positions: list[dict[str, Any]] = []
@@ -1653,7 +1718,7 @@ class TradeDataAggregator:
         open_orders: list[dict[str, Any]] = []
         current_price: float | None = None
         end_ms = int(time.time() * 1000)
-        start_ms = max(0, end_ms - HOUR_MS)
+        start_ms = max(0, end_ms - RECENT_ORDER_LOOKBACK_MS)
 
         if normalized_market == "futures":
             balances = _normalize_balance_entries(
@@ -1666,17 +1731,16 @@ class TradeDataAggregator:
                 "futures",
                 trading_mode=mode,
             )
-            recent_orders = _normalize_orders(
-                self.fetcher.fetch_futures_orders(
-                    profile_name=profile_name,
-                    trading_mode=mode,
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                    symbol=symbol,
-                ),
-                "futures",
+            recent_orders, recent_orders_partial = self._collect_recent_futures_orders(
+                profile_name=profile_name,
                 trading_mode=mode,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                symbol=symbol,
+                degraded_reasons=degraded_reasons,
+                constraints=constraints,
             )
+            partial = partial or recent_orders_partial
             if mode == "demo":
                 partial = True
                 _merge_degraded_reasons(
@@ -1733,15 +1797,15 @@ class TradeDataAggregator:
                 degraded_reasons=degraded_reasons,
             )
             partial = partial or spot_balance_partial
-            recent_orders = _normalize_orders(
-                self.fetcher.fetch_spot_orders(
-                    profile_name=profile_name,
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                    symbol=symbol,
-                ),
-                "spot",
+            recent_orders, recent_orders_partial = self._collect_recent_spot_orders(
+                profile_name=profile_name,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                symbol=symbol,
+                degraded_reasons=degraded_reasons,
+                constraints=constraints,
             )
+            partial = partial or recent_orders_partial
             if symbol:
                 current_price = _safe_current_price(
                     fetch_latest_price=lambda: self.fetcher.fetch_spot_latest_price(symbol=symbol),
@@ -1808,6 +1872,7 @@ class TradeDataAggregator:
             },
             "partial": partial,
             "degraded_reasons": degraded_reasons,
+            "constraints": constraints,
         }
 
     def collect_account_risk_payload(
@@ -1828,8 +1893,9 @@ class TradeDataAggregator:
         normalized_symbol = str(symbol).strip().upper() if symbol else None
         partial = False
         degraded_reasons: list[str] = []
+        constraints: list[dict[str, Any]] = []
         end_ms = int(time.time() * 1000)
-        start_ms = max(0, end_ms - HOUR_MS)
+        start_ms = max(0, end_ms - RECENT_ORDER_LOOKBACK_MS)
 
         balances: list[dict[str, Any]]
         positions: list[dict[str, Any]]
@@ -1850,17 +1916,16 @@ class TradeDataAggregator:
                 "futures",
                 trading_mode=mode,
             )
-            recent_orders = _normalize_orders(
-                self.fetcher.fetch_futures_orders(
-                    profile_name=profile_name,
-                    trading_mode=mode,
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                    symbol=normalized_symbol,
-                ),
-                "futures",
+            recent_orders, recent_orders_partial = self._collect_recent_futures_orders(
+                profile_name=profile_name,
                 trading_mode=mode,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                symbol=normalized_symbol,
+                degraded_reasons=degraded_reasons,
+                constraints=constraints,
             )
+            partial = partial or recent_orders_partial
             if mode == "demo":
                 partial = True
                 _merge_degraded_reasons(
@@ -1925,15 +1990,15 @@ class TradeDataAggregator:
             )
             partial = partial or spot_balance_partial
             positions = []
-            recent_orders = _normalize_orders(
-                self.fetcher.fetch_spot_orders(
-                    profile_name=profile_name,
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                    symbol=normalized_symbol,
-                ),
-                "spot",
+            recent_orders, recent_orders_partial = self._collect_recent_spot_orders(
+                profile_name=profile_name,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                symbol=normalized_symbol,
+                degraded_reasons=degraded_reasons,
+                constraints=constraints,
             )
+            partial = partial or recent_orders_partial
             open_orders = _normalize_orders(
                 self.fetcher.fetch_spot_open_orders(
                     profile_name=profile_name,
@@ -1986,7 +2051,7 @@ class TradeDataAggregator:
             },
             "partial": partial,
             "degraded_reasons": degraded_reasons,
-            "constraints": [],
+            "constraints": constraints,
         }
 
 

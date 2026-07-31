@@ -54,10 +54,19 @@ class MonitorDocsConsistencyTests(unittest.TestCase):
         self.assertIn("ask for the missing field", skill_text)
         self.assertIn("profile is always required", skill_text)
         self.assertIn("metric must be `unrealized_pnl`", skill_text)
+        self.assertIn("metric must be `baseline_unrealized_pnl`", skill_text)
         self.assertIn("dry-run commands still write local SQLite task state and events", skill_text)
         self.assertIn("Do not submit orders", skill_text)
         self.assertIn("Close the BTCUSDT long position automatically", skill_text)
         self.assertIn("unrealized PnL is above 50", skill_text)
+
+    def test_skill_uses_trader_numbered_profile_choice_when_account_is_ambiguous(self) -> None:
+        skill_text = SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("trader's numbered profile-choice rule", skill_text)
+        self.assertIn("number or exact profile name", skill_text)
+        self.assertIn("standalone account-selection question", skill_text)
+        self.assertIn("Do not infer a profile", skill_text)
 
     def test_skill_documents_combined_monitor_and_live_run_flow(self) -> None:
         skill_text = SKILL.read_text(encoding="utf-8")
@@ -77,13 +86,17 @@ class MonitorDocsConsistencyTests(unittest.TestCase):
             manifest["routing"]["domains"]["pnl_live_runner"]["commands"],
         )
 
-    def test_skill_documents_order_origin_requests_use_aggregate_position_pnl(self) -> None:
+    def test_skill_documents_order_origin_requests_use_order_baseline_pnl(self) -> None:
         skill_text = SKILL.read_text(encoding="utf-8")
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
 
-        self.assertIn("Order-origin monitor requests", skill_text)
+        self.assertIn("Order-baseline monitor requests", skill_text)
+        self.assertIn("`order_baseline_pnl_monitor`", skill_text)
+        self.assertIn("baseline_unrealized_pnl", skill_text)
+        self.assertIn("local order-baseline estimated unrealized PnL", skill_text)
+        self.assertIn("not exchange-native isolated single-order PnL", skill_text)
         self.assertIn("aggregate `symbol` + `position_side` position unrealized PnL", skill_text)
-        self.assertIn("not isolated single-order PnL", skill_text)
-        self.assertIn("show both the matched aggregate position size and fixed close quantity", skill_text)
+        self.assertIn("task_type: order_baseline_pnl_monitor", manifest["routing"]["decision_axes"])
 
     def test_skill_documents_codex_heartbeat_status_reporting(self) -> None:
         skill_text = SKILL.read_text(encoding="utf-8")

@@ -405,7 +405,12 @@ def compute_layout_metrics(
     hero_wraplength = status_wraplength
     summary_wraplength = max(300, section_width - _scaled_metric(40, scale, 24))
     section_wraplength = max(240, section_width - _scaled_metric(150, scale, 120))
-    overlay_wraplength = max(240, min(summary_wraplength, safe_width - page_pad_x * 4))
+    overlay_card_width = _scaled_metric(520, scale, 440)
+    overlay_icon_size = _scaled_metric(56, scale, 44)
+    overlay_wraplength = max(
+        280,
+        overlay_card_width - card_pad_x * 4 - overlay_icon_size - surface_gap - 2,
+    )
     sidebar_metric_wrap = max(90, _scaled_metric(110, scale, 82))
     sidebar_backend_wrap = max(180, _scaled_metric(220, scale, 170))
 
@@ -437,6 +442,8 @@ def compute_layout_metrics(
         "hero_wraplength": hero_wraplength,
         "summary_wraplength": summary_wraplength,
         "section_wraplength": section_wraplength,
+        "overlay_card_width": overlay_card_width,
+        "overlay_icon_size": overlay_icon_size,
         "overlay_wraplength": overlay_wraplength,
         "sidebar_metric_wrap": sidebar_metric_wrap,
         "sidebar_backend_wrap": sidebar_backend_wrap,
@@ -890,7 +897,10 @@ class ProfileManagerApp:
         self.description_text = None
         self.account_surface_shell = None
         self.account_lock_overlay = None
+        self.account_lock_card = None
+        self.account_lock_icon = None
         self.account_surface_locked = False
+        self.account_surface_state = "unknown"
         self.mode_badge = None
         self.credential_badge = None
         self.api_key_entry = None
@@ -953,6 +963,7 @@ class ProfileManagerApp:
         specs = {
             "eyebrow": (body_family, 10, "bold"),
             "hero_title": (display_family, 22, "bold"),
+            "overlay_title": (display_family, 15, "bold"),
             "hero_body": (body_family, 11, None),
             "title": (display_family, 17, "bold"),
             "section_title": (display_family, 11, "bold"),
@@ -1055,6 +1066,55 @@ class ProfileManagerApp:
             highlightbackground=PALETTE["input_border"],
             highlightcolor=PALETTE["accent"],
         )
+
+    def _create_account_lock_icon(self, parent: tk.Widget, size: int) -> tk.Canvas:
+        canvas = tk.Canvas(
+            parent,
+            width=size,
+            height=size,
+            bg=PALETTE["content_bg"],
+            bd=0,
+            highlightthickness=0,
+        )
+        scale = size / 56
+        stroke_width = max(2, int(round(2 * scale)))
+        canvas.create_oval(
+            1,
+            1,
+            size - 1,
+            size - 1,
+            fill=PALETTE["accent_soft"],
+            outline=PALETTE["accent_soft"],
+        )
+        canvas.create_arc(
+            int(round(17 * scale)),
+            int(round(10 * scale)),
+            int(round(39 * scale)),
+            int(round(34 * scale)),
+            start=0,
+            extent=180,
+            style="arc",
+            outline=PALETTE["accent"],
+            width=stroke_width,
+        )
+        canvas.create_rectangle(
+            int(round(14 * scale)),
+            int(round(25 * scale)),
+            int(round(42 * scale)),
+            int(round(44 * scale)),
+            fill=PALETTE["accent"],
+            outline=PALETTE["accent"],
+            width=stroke_width,
+        )
+        canvas.create_oval(
+            int(round(25 * scale)),
+            int(round(31 * scale)),
+            int(round(31 * scale)),
+            int(round(37 * scale)),
+            fill=PALETTE["content_bg"],
+            outline=PALETTE["content_bg"],
+        )
+        return canvas
 
     def _ensure_secret_placeholder_state(self) -> None:
         if not hasattr(self, "_secret_placeholder_fields"):
@@ -2169,6 +2229,8 @@ class ProfileManagerApp:
         self.vault_reset_button = None
         self.account_lock_unlock_button = None
         self.account_lock_reset_button = None
+        self.account_lock_card = None
+        self.account_lock_icon = None
         self.mode_badge = None
         self.credential_badge = None
         self.api_key_entry = None
@@ -2193,18 +2255,30 @@ class ProfileManagerApp:
         self._build_sidebar(sidebar)
         self._build_content(content)
 
-        self.account_lock_title_var = tk.StringVar(
-            value=self.local_text("Profile Workspace Locked", "账号工作区已锁定")
-        )
+        self.account_lock_eyebrow_var = tk.StringVar(value=self.local_text("SECURITY LOCK", "安全保护"))
+        self.account_lock_title_var = tk.StringVar(value=self.local_text("Profile Management Locked", "账号管理已锁定"))
         self.account_lock_body_var = tk.StringVar(
             value=self.local_text(
                 "Unlock the shared vault to continue. If you forgot the passphrase, reset the vault here.",
                 "请先解锁共享 Vault 后继续；如果忘记密码，可在这里直接重置 Vault。",
             )
         )
+        self.account_lock_hint_var = tk.StringVar(
+            value=self.local_text(
+                "Resetting removes every saved profile and credential.",
+                "重置会清除所有已保存账号和密钥。",
+            )
+        )
         self.account_lock_overlay = tk.Frame(shell, bg=PALETTE["root_bg"], highlightthickness=0, bd=0)
         overlay_card_outer, overlay_card = self._create_card(self.account_lock_overlay, PALETTE["content_bg"], PALETTE["card_border"])
-        overlay_card_outer.place(relx=0.5, rely=0.5, anchor="center")
+        self.account_lock_card = overlay_card_outer
+        overlay_card_outer.place(
+            relx=0.5,
+            rely=0.5,
+            anchor="center",
+            width=int(metrics["overlay_card_width"]),
+        )
+        tk.Frame(overlay_card, bg=PALETTE["accent"], height=3).pack(fill=tk.X)
         overlay_body = tk.Frame(
             overlay_card,
             bg=PALETTE["content_bg"],
@@ -2212,49 +2286,66 @@ class ProfileManagerApp:
             pady=int(metrics["card_pad_y"] * 2),
         )
         overlay_body.pack(fill=tk.BOTH, expand=True)
+        content_row = tk.Frame(overlay_body, bg=PALETTE["content_bg"])
+        content_row.pack(fill=tk.BOTH, expand=True)
+        content_row.grid_columnconfigure(1, weight=1)
+        self.account_lock_icon = self._create_account_lock_icon(content_row, int(metrics["overlay_icon_size"]))
+        self.account_lock_icon.grid(row=0, column=0, sticky="n", padx=(0, int(metrics["surface_gap"])))
+
+        overlay_copy = tk.Frame(content_row, bg=PALETTE["content_bg"])
+        overlay_copy.grid(row=0, column=1, sticky="nsew")
         tk.Label(
-            overlay_body,
-            text=self.local_text("ACCOUNT ACCESS", "账号访问"),
-            bg=PALETTE["content_bg"],
-            fg=PALETTE["accent"],
+            overlay_copy,
+            textvariable=self.account_lock_eyebrow_var,
+            bg=PALETTE["accent_soft"],
+            fg=PALETTE["badge_info_fg"],
             font=self.fonts["eyebrow"],
+            padx=int(metrics["badge_pad_x"]),
+            pady=int(metrics["badge_pad_y"]),
         ).pack(anchor=tk.W)
         tk.Label(
-            overlay_body,
+            overlay_copy,
             textvariable=self.account_lock_title_var,
             bg=PALETTE["content_bg"],
             fg=PALETTE["heading"],
-            font=self.fonts["title"],
+            font=self.fonts["overlay_title"],
             justify=tk.LEFT,
-            wraplength=int(metrics["summary_wraplength"]),
-        ).pack(anchor=tk.W, pady=(int(metrics["section_gap"]), int(metrics["section_gap"])))
+            wraplength=int(metrics["overlay_wraplength"]),
+        ).pack(anchor=tk.W, pady=(int(metrics["section_gap"]), max(4, int(metrics["section_gap"]) // 2)))
         tk.Label(
-            overlay_body,
+            overlay_copy,
             textvariable=self.account_lock_body_var,
             bg=PALETTE["content_bg"],
             fg=PALETTE["muted"],
             font=self.fonts["body"],
             justify=tk.LEFT,
-            wraplength=int(metrics["summary_wraplength"]),
+            wraplength=int(metrics["overlay_wraplength"]),
         ).pack(anchor=tk.W)
-        overlay_actions = tk.Frame(overlay_body, bg=PALETTE["content_bg"])
-        overlay_actions.pack(fill=tk.X, pady=(int(metrics["surface_gap"]), 0))
-        overlay_actions.grid_columnconfigure(0, weight=1)
-        overlay_actions.grid_columnconfigure(1, weight=1)
+        overlay_actions = tk.Frame(overlay_copy, bg=PALETTE["content_bg"])
+        overlay_actions.pack(anchor=tk.W, pady=(int(metrics["surface_gap"]), 0))
         self.account_lock_unlock_button = self._create_button(
             overlay_actions,
             self.local_text("Unlock Vault", "解锁 Vault"),
             self.manage_vault,
             "primary",
         )
-        self.account_lock_unlock_button.grid(row=0, column=0, sticky="ew", padx=(0, int(metrics["button_gap"]) // 2))
+        self.account_lock_unlock_button.grid(row=0, column=0, sticky="w", padx=(0, int(metrics["button_gap"]) // 2))
         self.account_lock_reset_button = self._create_button(
             overlay_actions,
             self.local_text("Reset Vault", "重置 Vault"),
             self.reset_vault,
             "danger",
         )
-        self.account_lock_reset_button.grid(row=0, column=1, sticky="ew", padx=(int(metrics["button_gap"]) // 2, 0))
+        self.account_lock_reset_button.grid(row=0, column=1, sticky="w", padx=(int(metrics["button_gap"]) // 2, 0))
+        tk.Label(
+            overlay_copy,
+            textvariable=self.account_lock_hint_var,
+            bg=PALETTE["content_bg"],
+            fg=PALETTE["muted"],
+            font=self.fonts["small"],
+            justify=tk.LEFT,
+            wraplength=int(metrics["overlay_wraplength"]),
+        ).pack(anchor=tk.W, pady=(int(metrics["section_gap"]), 0))
         self._sync_account_surface_lock()
 
     def _build_hero(self) -> None:
@@ -2359,6 +2450,69 @@ class ProfileManagerApp:
         if overlay is None or shell is None:
             return
         if self.account_surface_locked:
+            state = getattr(self, "account_surface_state", "unknown")
+            eyebrow_var = getattr(self, "account_lock_eyebrow_var", None)
+            title_var = getattr(self, "account_lock_title_var", None)
+            body_var = getattr(self, "account_lock_body_var", None)
+            hint_var = getattr(self, "account_lock_hint_var", None)
+            action_button = getattr(self, "account_lock_unlock_button", None)
+            reset_button = getattr(self, "account_lock_reset_button", None)
+            if state == "uninitialized":
+                if eyebrow_var is not None:
+                    eyebrow_var.set(self.local_text("FIRST-TIME SETUP", "首次使用"))
+                if title_var is not None:
+                    title_var.set(self.local_text("Set Up Secure Storage", "先完成安全初始化"))
+                if body_var is not None:
+                    body_var.set(
+                        self.local_text(
+                            "Create a local encrypted vault to protect API credentials. You can add and manage profiles after setup.",
+                            "创建本机加密 Vault，用于保护 API 密钥。完成后即可添加和管理账号。",
+                        )
+                    )
+                if hint_var is not None:
+                    hint_var.set(
+                        self.local_text(
+                            "Set it up once, then unlock only when needed.",
+                            "只需设置一次，之后按需解锁。",
+                        )
+                    )
+                if action_button is not None:
+                    action_button.configure(text=self.local_text("Start Setup", "开始初始化"))
+                    action_button.grid_configure(sticky="w", padx=(0, 0))
+                if reset_button is not None:
+                    reset_button.grid_remove()
+            elif state == "locked":
+                if eyebrow_var is not None:
+                    eyebrow_var.set(self.local_text("SECURITY LOCK", "安全保护"))
+                if title_var is not None:
+                    title_var.set(self.local_text("Profile Management Locked", "账号管理已锁定"))
+                if body_var is not None:
+                    body_var.set(
+                        self.local_text(
+                            "Unlock the shared vault to continue. If you forgot the passphrase, reset the vault here.",
+                            "请先解锁共享 Vault 后继续；如果忘记密码，可在这里直接重置 Vault。",
+                        )
+                    )
+                if hint_var is not None:
+                    hint_var.set(
+                        self.local_text(
+                            "Resetting removes every saved profile and credential.",
+                            "重置会清除所有已保存账号和密钥。",
+                        )
+                    )
+                if action_button is not None:
+                    action_button.configure(text=self.local_text("Unlock Vault", "解锁 Vault"))
+                    action_button.grid_configure(
+                        sticky="w",
+                        padx=(0, int(self._layout_metrics["button_gap"]) // 2),
+                    )
+                if reset_button is not None:
+                    reset_button.grid(
+                        row=0,
+                        column=1,
+                        sticky="w",
+                        padx=(int(self._layout_metrics["button_gap"]) // 2, 0),
+                    )
             overlay.place(in_=shell, x=0, y=0, relwidth=1, relheight=1)
             overlay.lift()
             return
@@ -2433,7 +2587,8 @@ class ProfileManagerApp:
         self.vault_state_var.set(state_text)
         self.vault_guidance_var.set(guidance_text)
         self.profile_actions_enabled = vault_ready
-        self.account_surface_locked = current_state == "locked"
+        self.account_surface_state = current_state
+        self.account_surface_locked = current_state in {"uninitialized", "locked"}
         self.header_var.set(header_text)
         self._sync_profile_action_controls()
         self._sync_account_surface_lock()

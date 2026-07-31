@@ -15,7 +15,7 @@ Use in-page search with the exact endpoint key from the summary table to jump to
 
 ## Summary Table
 
-Total endpoints: **33**
+Total endpoints: **32**
 
 | Key | Method | Path | Auth |
 |---|---|---|---|
@@ -48,7 +48,6 @@ Total endpoints: **33**
 | `spot.rebate.get_affiliate_deal_data` | `GET` | `/api/v3/agency/getDealData` | `True` |
 | `spot.rebate.get_affiliate_ui_ds` | `GET` | `/api/v3/rebate/affiliate/getAffiliateUIDs` | `True` |
 | `spot.rebate.get_channel_user_trade_and_asset` | `GET` | `/api/v3/rebate/affiliate/getChannelUserTradeAndAsset` | `True` |
-| `spot.rebate.get_internal_withdrawal_status` | `GET` | `/api/v3/rebate/affiliate/getInternalWithdrawalStatus` | `True` |
 | `spot.rebate.internal_withdrawal` | `POST` | `/api/v3/rebate/affiliate/internalWithdrawal` | `True` |
 | `spot.rebate.query_sub_channel_transactions` | `POST` | `/api/v3/rebate/affiliate/querySubChannelTransactions` | `True` |
 | `spot.rebate.verify_referrals` | `GET` | `/api/v3/agency/verifyReferrals` | `True` |
@@ -940,47 +939,6 @@ NONE
 | `pages` | `Integer` | Total pages |
 | `pageSize` | `Integer` | Page size |
 | `total` | `Long` | Total records |
-
-## spot.rebate.get_internal_withdrawal_status — Get Internal Withdrawal Status
-
-- Method: `GET`
-- Path: `/api/v3/rebate/affiliate/getInternalWithdrawalStatus`
-- Category: `rebate`
-- Requires Auth: `True`
-- Weight(IP/UID): `100 / 100`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/GetInternalWithdrawalStatus
-
-### Request Parameters
-
-| Name | Type | Required | Description |
-|---|---|---|---|
-| `String` | `` | `No` | Withdraw ID |
-| `String` | `` | `No` | Currency type (USDT, BTC) |
-| `Long` | `` | `No` | Start timestamp in UTC (milliseconds) (Only data from the past month can be queried) |
-| `Long` | `` | `No` | End timestamp in UTC (milliseconds) (Only data from the past month can be queried) |
-| `String` | `` | `No` | Type of the originating account (SPOT: spot wallet, FUND: funding wallet, Default: SPOT) |
-| `String` | `` | `No` | Type of the target account (SPOT: spot wallet, FUND: funding wallet, Default: SPOT) |
-| `Integer` | `` | `No` | Page number (starting from 1, default 1) |
-| `Integer` | `` | `No` | Page size (default 100, max 200) |
-
-### Response Parameters
-
-| Name | Type | Description |
-|---|---|---|
-| `items` | `Array` | Withdrawal records |
-| `fromUserId` | `Long` | Transfer out User ID |
-| `toUserId` | `Long` | Transfer in User ID |
-| `withdrawId` | `String` | Withdraw ID |
-| `coin` | `String` | USDT, BTC ... |
-| `status` | `String` | Possible values: SUCCESS FAILED PROGRESSING |
-| `amount` | `String` | Transfer amount |
-| `createTime` | `Long` | Withdraw created timestamp (ms) |
-| `updateTime` | `Long` | Withdraw updated timestamp (ms) |
-| `total` | `Long` | Total records |
-| `pageSize` | `Integer` | Page size |
-| `page` | `Integer` | Current page number |
-| `pages` | `Integer` | Total pages |
-| `hasNextPage` | `Boolean` | Whether more pages exist |
 
 ## spot.rebate.internal_withdrawal — Internal Withdrawal
 

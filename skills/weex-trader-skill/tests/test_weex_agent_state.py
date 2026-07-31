@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import inspect
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,32 @@ from weex_gui_bootstrap import RuntimeProbe  # noqa: E402
 
 
 class AgentStateGuiRuntimeTests(unittest.TestCase):
+    def test_runtime_state_can_skip_default_profile_credential_probe(self) -> None:
+        self.assertIn(
+            "probe_default_profile_usable",
+            inspect.signature(agent_state.build_agent_runtime_state).parameters,
+        )
+        metadata_summary = {
+            "count": 1,
+            "default_profile_id": "profile-a",
+            "default_profile_name": "main",
+            "summary": [],
+        }
+        with mock.patch.object(agent_state, "_probe_required_modules", return_value=(True, [])):
+            with mock.patch.object(agent_state, "validate_runtime_environment", return_value={"ok": True, "issues": []}):
+                with mock.patch.object(agent_state, "_load_metadata_summary", return_value=metadata_summary):
+                    with mock.patch.object(agent_state, "_load_vault_summary", return_value={"configured": True, "mode": "manual_once"}):
+                        with mock.patch.object(agent_state, "_load_store_module", return_value=object()):
+                            with mock.patch.object(agent_state, "_probe_default_profile_usable") as credential_probe:
+                                payload = agent_state.build_agent_runtime_state(
+                                    preferred_language="zh",
+                                    command="partner.preflight",
+                                    probe_default_profile_usable=False,
+                                )
+
+        credential_probe.assert_not_called()
+        self.assertIsNone(payload["profiles"]["default_profile_usable"])
+
     def test_preflight_requires_managed_runtime_even_when_current_runtime_has_tk(self) -> None:
         current_probe = RuntimeProbe(usable=True, reason="ok", returncode=0, tk_version="8.6", tcl_version="8.6")
         missing_managed_python = Path("/tmp/missing-weex-managed-python")

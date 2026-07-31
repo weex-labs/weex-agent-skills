@@ -2,11 +2,11 @@
 
 [English](README.md)
 
-本仓库目前支持 Codex、Openclaw、Claude Code 使用 WEEX Skills。
+本仓库为 Codex、Claude Code、Cursor、GitHub Copilot 和 OpenClaw 提供 WEEX Skills 安装入口。前四个宿主已完成本地安装 dry-run；OpenClaw 需使用原生安装器，本工作区尚未完成实机 smoke，不能据此宣称五宿主均已验收。
 
 安装这些 skill 以后，你可以让 AI 工具查询 WEEX 市场数据、查看账户状态、采集交易历史、预览订单风险、创建自动化监控，或分析 WEEX 交易记录。普通使用不需要你直接运行 Python 脚本，从聊天里点名 skill 开始即可。
 
-你可以把 skill 理解成 AI 工具的“能力包”。在聊天里提到 `$weex-trader-skill`、`$weex-analysis-skill` 或 `$weex-monitor-skill`，就是在告诉 AI 使用哪一套 WEEX 能力。
+你可以把 skill 理解成 AI 工具的“能力包”。在聊天里提到 `$weex-trader-skill`、`$weex-analysis-skill`、`$weex-monitor-skill` 或 `$weex-partner-skill`，就是在告诉 AI 使用哪一套 WEEX 能力。
 
 ## 从这里开始
 
@@ -32,7 +32,7 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 
 4. 如果你是第一次使用，建议先从只读任务开始，比如查询行情、查看账户、采集交易历史复盘数据（replay），或分析风险，再尝试任何实时下单。
 
-## 三个 Skill 分别做什么？
+## 四个 Skill 分别做什么？
 
 ### `weex-trader-skill`
 
@@ -101,6 +101,16 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 | 收益监控 | `使用 $weex-monitor-skill 监控 BTCUSDT 多单，先核对真实持仓，未实现盈利大于 50 USDT 时在我授权后市价平多。` |
 | 查看监控 | `使用 $weex-monitor-skill 列出我的本地监控任务和最近事件。` |
 
+### `weex-partner-skill`
+
+查询 WEEX 合伙人直客 UID、直客交易与资金、返佣、子代理统计、直客关系、直客资产或交易统计时，使用 [`weex-partner-skill`](skills/weex-partner-skill/SKILL.md)。
+
+它复用 `weex-trader-skill` 的现有 profile 和 Application Vault，REST、凭据和签名仍由 trader 负责；同一个 profile 仍可通过 trader 的既有预览和明确确认门禁正常下单。
+
+Partner-only 对话使用 trader 的安全 Partner preflight：只返回选定 profile 的非秘密身份与 `partner_production|partner_test` 标签，不把具体测试地址、API key hint 或其他 profile 路由元数据写入工具 transcript。
+
+示例：`使用 $weex-partner-skill 查询官方默认时间范围内的返佣，并说明实际 UTC 时间范围。`
+
 ## 我应该用哪个 Skill？
 
 | 你想做什么 | 使用 |
@@ -113,6 +123,7 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 | 创建交易所原生价格条件平仓 | `weex-trader-skill` |
 | 分析已有的 WEEX JSON 文件或粘贴的 JSON 数据 | `weex-analysis-skill` |
 | 分析实时账户历史 | 先用 `weex-trader-skill` 采集数据，再用 `weex-analysis-skill` 分析 |
+| 查询合伙人直客、返佣、资产或子代理数据 | `weex-partner-skill` |
 
 ## 从本地目录安装（可选）
 
@@ -122,9 +133,18 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 python3 tools/install_local_skills.py --all --agent codex
 ```
 
-Claude Code 请使用 `--agent claude-code`。本地安装工具会校验 `gh skill install` 当前支持的 agent；如果你的宿主不在支持列表里，请用 `--dir` 安装到该宿主期望的 skills 目录。
+Claude Code、Cursor、GitHub Copilot 分别使用 `--agent claude-code`、`--agent cursor`、`--agent github-copilot`。本地安装工具会校验 `gh skill install` 当前支持的 agent。
 
-`weex-monitor-skill` 的实时账户读取和实时执行委托依赖 `weex-trader-skill`。从本地安装器单独安装 `weex-monitor-skill` 时会自动带上 `weex-trader-skill`；普通使用仍建议安装全部 skills。
+`weex-monitor-skill` 和 `weex-partner-skill` 都依赖 `weex-trader-skill`。从本地安装器单独安装任意一个时会自动带上 trader；普通使用仍建议安装全部 skills。
+
+OpenClaw 使用原生 Skill 安装器。在仓库根目录先安装 trader，再安装 partner：
+
+```bash
+openclaw skills install ./skills/weex-trader-skill --as weex-trader-skill
+openclaw skills install ./skills/weex-partner-skill --as weex-partner-skill
+```
+
+全局共享安装时两条命令都追加 `--global`；只安装到某个 Agent workspace 时两条命令都追加 `--agent <id>`。随后运行 `openclaw skills list --eligible`、`openclaw skills info weex-partner-skill` 和 `openclaw skills check`。不要使用 `gh skill install --agent openclaw`。
 
 大多数用户只需要使用 [从这里开始](#从这里开始) 中的 GitHub 安装命令。
 
@@ -134,6 +154,7 @@ Claude Code 请使用 `--agent claude-code`。本地安装工具会校验 `gh sk
 - 不要把 API key、API secret、passphrase、vault password 或临时密钥文件粘贴到聊天窗口、issue、公开日志或截图里。
 - 优先使用 saved profile、本地 profile manager、`--prompt-secrets`、环境变量或 `--secrets-stdin-json` 等本地密钥输入方式。
 - 为这个工作流使用最小权限 API key。如果凭证可能已经暴露，请立即撤销或轮换。
+- Partner 查询使用生产默认地址，或 saved profile 中的 HTTPS `https://*.weex.tech` 测试子域。结果只显示 Partner 环境标签，不显示具体测试地址；仍禁止 API base 环境变量覆盖和鉴权重定向。
 - `weex-analysis-skill` 的输出只用于复盘和风险参考，不构成投资或交易建议。
 - 不确定时，先让 AI 工具预览或解释，再要求它执行任何操作。
 
@@ -142,5 +163,6 @@ Claude Code 请使用 `--agent claude-code`。本地安装工具会校验 `gh sk
 - [`weex-trader-skill` README](skills/weex-trader-skill/README.md)：实时 WEEX 访问、API profile、订单预览、实时订单流程和故障排查。
 - [`weex-analysis-skill` README](skills/weex-analysis-skill/README.md)：输入数据要求、分析示例、replay 复盘和安全说明。
 - [`weex-monitor-skill` SKILL.md](skills/weex-monitor-skill/SKILL.md)：自动化监控 DSL、确认流程、dry-run runner 和 live 执行边界。
+- [`weex-partner-skill` SKILL.md](skills/weex-partner-skill/SKILL.md)：合伙人查询路由、全量确认、默认时间、分页和只读边界。
 - [`weex-trader-skill` script operations](skills/weex-trader-skill/references/script-operations.md)：面向进阶用户的直接脚本用法。
 - [`weex-analysis-skill` analysis playbook](skills/weex-analysis-skill/references/analysis-playbook.md)：分析行为和结果解读细节。

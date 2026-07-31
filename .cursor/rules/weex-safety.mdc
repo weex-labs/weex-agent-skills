@@ -6,6 +6,8 @@ alwaysApply: true
 - Use `skills/weex-trader-skill` for WEEX execution, profile, vault, and live REST workflows.
 - Use `skills/weex-analysis-skill` for read-only analysis of normalized snapshots and fills.
 - Use `skills/weex-monitor-skill` for WEEX automated monitor workflows that create, confirm, evaluate, run, list, or cancel local PnL monitor tasks while delegating live execution to trader.
+- Use `skills/weex-partner-skill` for WEEX Partner referral, commission, direct-user asset/trade, sub-agent, and referral relationship queries while delegating REST, profile, and Vault work to trader.
+- Partner REST credentials may use the production default or a saved HTTPS `https://*.weex.tech` test subdomain. Keep API base environment overrides and authenticated redirects forbidden, and never expose the concrete test origin in Partner query output.
 - Use official WEEX conditional orders through `skills/weex-trader-skill` for price-threshold close requests; do not create local price monitor tasks in `weex-monitor-skill`.
 - Never send mutating WEEX requests without explicit user confirmation.
 - Prefer secret transport that avoids putting credentials or vault passwords directly on argv.

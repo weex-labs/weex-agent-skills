@@ -25,7 +25,10 @@ DEFAULT_CODEX_REPORTING_INTERVAL_SECONDS = DEFAULT_AGENT_REPORTING_INTERVAL_SECO
 MIN_CODEX_REPORTING_INTERVAL_SECONDS = MIN_AGENT_REPORTING_INTERVAL_SECONDS
 TASK_STORE_FILENAME = "monitor-tasks.json"
 TASK_DB_FILENAME = "monitor-tasks.sqlite3"
-VALID_TASK_TYPES = {"position_pnl_monitor"}
+POSITION_PNL_MONITOR = "position_pnl_monitor"
+ORDER_BASELINE_PNL_MONITOR = "order_baseline_pnl_monitor"
+VALID_TASK_TYPES = {POSITION_PNL_MONITOR, ORDER_BASELINE_PNL_MONITOR}
+PNL_MONITOR_TASK_TYPES = {POSITION_PNL_MONITOR, ORDER_BASELINE_PNL_MONITOR}
 VALID_POSITION_SIDES = {"LONG", "SHORT"}
 VALID_OPERATORS = {">", ">=", "<", "<="}
 VALID_CALLBACK_TYPES = {"current_thread"}
@@ -220,8 +223,13 @@ def normalize_task(raw_task: dict[str, Any], *, now_ms: int | None = None) -> di
     trading_mode = _normalize_trading_mode(_required_string(raw_task, "trading_mode"))
     symbol = _required_string(raw_task, "symbol").upper()
     position_side = _normalize_position_side(raw_task.get("position_side"))
+    baseline = (
+        _normalize_baseline(raw_task.get("baseline"))
+        if task_type == ORDER_BASELINE_PNL_MONITOR
+        else None
+    )
     condition = _normalize_condition(raw_task.get("condition"), task_type)
-    action = _normalize_action(raw_task.get("action"), position_side, task_type)
+    action = _normalize_action(raw_task.get("action"), position_side, task_type, baseline=baseline)
     callback = _normalize_callback(raw_task.get("callback"))
     frequency_seconds = _normalize_frequency(raw_task.get("frequency_seconds"))
     created_at_ms = now_ms if now_ms is not None else _now_ms()
@@ -244,13 +252,33 @@ def normalize_task(raw_task: dict[str, Any], *, now_ms: int | None = None) -> di
         "created_at_ms": created_at_ms,
         "execution_delegate": "weex-trader-skill",
     }
+    if baseline is not None:
+        task["baseline"] = baseline
 
     return task
 
 
+def evaluate_monitor_task(
+    task: dict[str, Any],
+    positions: list[dict[str, Any]],
+    *,
+    account_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized = normalize_task(task)
+    if normalized["task_type"] == POSITION_PNL_MONITOR:
+        return evaluate_pnl_task(normalized, positions)
+    if normalized["task_type"] == ORDER_BASELINE_PNL_MONITOR:
+        return evaluate_order_baseline_pnl_task(
+            normalized,
+            positions,
+            account_payload=account_payload,
+        )
+    raise MonitorInputError(f"unsupported task_type: {normalized['task_type']}")
+
+
 def evaluate_pnl_task(task: dict[str, Any], positions: list[dict[str, Any]]) -> dict[str, Any]:
     normalized = normalize_task(task)
-    if normalized["task_type"] != "position_pnl_monitor":
+    if normalized["task_type"] != POSITION_PNL_MONITOR:
         raise MonitorInputError("evaluate_pnl_task requires position_pnl_monitor")
     if not isinstance(positions, list):
         raise MonitorInputError("positions must be a JSON array")
@@ -294,6 +322,79 @@ def evaluate_pnl_task(task: dict[str, Any], positions: list[dict[str, Any]]) -> 
             "position_side": normalized["position_side"],
             "order_type": "MARKET",
             "quantity": str(quantity),
+        },
+    }
+
+
+def evaluate_order_baseline_pnl_task(
+    task: dict[str, Any],
+    positions: list[dict[str, Any]],
+    *,
+    account_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized = normalize_task(task)
+    if normalized["task_type"] != ORDER_BASELINE_PNL_MONITOR:
+        raise MonitorInputError("evaluate_order_baseline_pnl_task requires order_baseline_pnl_monitor")
+    if not isinstance(positions, list):
+        raise MonitorInputError("positions must be a JSON array")
+
+    target = _find_position(normalized, positions)
+    if target is None:
+        return {
+            "triggered": False,
+            "reason": "position_not_found",
+            "execution_delegate": "weex-trader-skill",
+        }
+
+    current_price_raw = _current_price_for_position(target, account_payload)
+    if current_price_raw is None or str(current_price_raw).strip() == "":
+        return {
+            "triggered": False,
+            "reason": "price_not_found",
+            "execution_delegate": "weex-trader-skill",
+        }
+
+    current_price = _decimal_from_any(current_price_raw, "current_price")
+    baseline = normalized["baseline"]
+    entry_price = Decimal(baseline["entry_price"])
+    quantity = Decimal(baseline["quantity"])
+    pnl_value = _baseline_unrealized_pnl(
+        position_side=normalized["position_side"],
+        entry_price=entry_price,
+        current_price=current_price,
+        quantity=quantity,
+    )
+    threshold = Decimal(normalized["condition"]["threshold"])
+    operator = normalized["condition"]["operator"]
+    if not _compare(pnl_value, operator, threshold):
+        return {
+            "triggered": False,
+            "reason": "condition_not_matched",
+            "current_value": str(pnl_value),
+            "threshold": str(threshold),
+            "execution_delegate": "weex-trader-skill",
+        }
+
+    return {
+        "triggered": True,
+        "reason": "condition_matched",
+        "execution_delegate": "weex-trader-skill",
+        "trigger_snapshot": {
+            "symbol": normalized["symbol"],
+            "position_side": normalized["position_side"],
+            "baseline_entry_price": baseline["entry_price"],
+            "baseline_quantity": baseline["quantity"],
+            "current_price": str(current_price_raw).strip(),
+            "baseline_unrealized_pnl": str(pnl_value),
+            "threshold": normalized["condition"]["threshold"],
+            "operator": operator,
+        },
+        "close_order": {
+            "symbol": normalized["symbol"],
+            "side": _close_order_side(normalized["position_side"]),
+            "position_side": normalized["position_side"],
+            "order_type": "MARKET",
+            "quantity": baseline["quantity"],
         },
     }
 
@@ -353,8 +454,8 @@ def prepare_live_confirmation(
     rendered_at_ms = now_ms if now_ms is not None else _now_ms()
     resolved_language = _normalize_language(language)
     task_type = _required_string(raw_task, "task_type")
-    if task_type != "position_pnl_monitor":
-        raise MonitorInputError("live position confirmation requires position_pnl_monitor")
+    if task_type not in PNL_MONITOR_TASK_TYPES:
+        raise MonitorInputError("live position confirmation requires a supported PnL monitor task")
 
     task = normalize_task(raw_task, now_ms=rendered_at_ms)
     duration_seconds_float = _normalize_duration_seconds(duration_seconds)
@@ -520,7 +621,7 @@ def render_confirmation_text(
                     f"{position_match_label}: "
                     f"{position_snapshot['symbol']} {_position_side_label(position_snapshot['position_side'], language=resolved_language)}, "
                     f"position size: {position_snapshot['quantity']}, "
-                    f"{_position_pnl_summary(action, position_snapshot, language=resolved_language)}"
+                    f"{_position_pnl_summary(task, action, position_snapshot, language=resolved_language)}"
                 ),
             )
         else:
@@ -530,10 +631,12 @@ def render_confirmation_text(
                     f"{position_match_label}: "
                     f"{position_snapshot['symbol']} {_position_side_label(position_snapshot['position_side'])}, "
                     f"持仓数量: {position_snapshot['quantity']}, "
-                    f"{_position_pnl_summary(action, position_snapshot, language=resolved_language)}"
+                    f"{_position_pnl_summary(task, action, position_snapshot, language=resolved_language)}"
                 ),
             )
         parts.append(_pnl_scope_line(task, action, position_snapshot, language=resolved_language))
+        if task["task_type"] == ORDER_BASELINE_PNL_MONITOR:
+            parts.append(_baseline_detail_line(task, position_snapshot, language=resolved_language))
         parts.append(_position_detail_line(position_snapshot, language=resolved_language))
 
     if resolved_language == "en":
@@ -600,6 +703,7 @@ def build_idempotency_key(raw_task: dict[str, Any], purpose: str) -> str:
         "trading_mode": task["trading_mode"],
         "symbol": task["symbol"],
         "position_side": task["position_side"],
+        "baseline": task.get("baseline"),
         "condition": task["condition"],
         "action": task["action"],
         "purpose": str(purpose).strip(),
@@ -626,10 +730,10 @@ def run_once_dry_run(
             continue
         if task_id is not None and task.get("task_id") != task_id:
             continue
-        if task.get("task_type") != "position_pnl_monitor":
+        if task.get("task_type") not in PNL_MONITOR_TASK_TYPES:
             continue
 
-        result = evaluate_pnl_task(task, positions)
+        result = evaluate_monitor_task(task, positions)
         idempotency_key = build_idempotency_key(task, "dry-run-trigger")
         output = {
             "task_id": task["task_id"],
@@ -792,8 +896,8 @@ def confirm_and_run_live_loop(
         raise MonitorInputError("sleep_seconds must be >= 0")
 
     requested = normalize_task(raw_task)
-    if requested["task_type"] != "position_pnl_monitor":
-        raise MonitorInputError("confirm-and-run-loop requires position_pnl_monitor")
+    if requested["task_type"] not in PNL_MONITOR_TASK_TYPES:
+        raise MonitorInputError("confirm-and-run-loop requires a supported PnL monitor task")
     _validate_execution_authorization(
         requested["trading_mode"],
         confirm_live=confirm_live,
@@ -1068,7 +1172,7 @@ def run_live_once(
             continue
         if task_id is not None and task.get("task_id") != task_id:
             continue
-        if task.get("task_type") != "position_pnl_monitor":
+        if task.get("task_type") not in PNL_MONITOR_TASK_TYPES:
             continue
         normalized_for_auth = normalize_task(task)
         _validate_execution_authorization(
@@ -1096,7 +1200,7 @@ def run_live_once(
             )
             continue
         try:
-            task = _load_confirmed_active_task(task, expected_task_type="position_pnl_monitor")
+            task = _load_confirmed_active_task(task, expected_task_type=normalized_for_auth["task_type"])
         except MonitorInputError as exc:
             outputs.append(
                 _mark_task_review_required(
@@ -1117,7 +1221,11 @@ def run_live_once(
             outputs.append(output)
             continue
 
-        first_result = evaluate_pnl_task(task, _positions_from_account_payload(first_payload))
+        first_result = evaluate_monitor_task(
+            task,
+            _positions_from_account_payload(first_payload),
+            account_payload=first_payload,
+        )
         if not first_result.get("triggered"):
             output = {
                 "task_id": task["task_id"],
@@ -1137,7 +1245,11 @@ def run_live_once(
             outputs.append(output)
             continue
 
-        recheck_result = evaluate_pnl_task(task, _positions_from_account_payload(recheck_payload))
+        recheck_result = evaluate_monitor_task(
+            task,
+            _positions_from_account_payload(recheck_payload),
+            account_payload=recheck_payload,
+        )
         if not recheck_result.get("triggered"):
             output = {
                 "task_id": task["task_id"],
@@ -1277,7 +1389,7 @@ def claim_task_for_execution(raw_task: dict[str, Any], *, now_ms: int | None = N
             FROM monitor_tasks
             WHERE task_id <> ?
               AND status = 'active'
-              AND task_type = 'position_pnl_monitor'
+              AND task_type IN (?, ?)
               AND profile = ?
               AND symbol = ?
               AND position_side = ?
@@ -1285,6 +1397,8 @@ def claim_task_for_execution(raw_task: dict[str, Any], *, now_ms: int | None = N
             """,
             (
                 task["task_id"],
+                POSITION_PNL_MONITOR,
+                ORDER_BASELINE_PNL_MONITOR,
                 task["profile"],
                 task["symbol"],
                 task["position_side"],
@@ -1390,7 +1504,7 @@ def _minimum_active_pnl_frequency_seconds(*, task_id: str | None = None) -> int:
         int(task.get("frequency_seconds", DEFAULT_FREQUENCY_SECONDS))
         for task in load_tasks()
         if task.get("status") == "active"
-        and task.get("task_type") == "position_pnl_monitor"
+        and task.get("task_type") in PNL_MONITOR_TASK_TYPES
         and (task_id is None or task.get("task_id") == task_id)
     ]
     return min(frequencies) if frequencies else DEFAULT_FREQUENCY_SECONDS
@@ -1399,7 +1513,7 @@ def _minimum_active_pnl_frequency_seconds(*, task_id: str | None = None) -> int:
 def _has_active_pnl_tasks(*, task_id: str | None = None) -> bool:
     return any(
         task.get("status") == "active"
-        and task.get("task_type") == "position_pnl_monitor"
+        and task.get("task_type") in PNL_MONITOR_TASK_TYPES
         and (task_id is None or task.get("task_id") == task_id)
         for task in load_tasks()
     )
@@ -1524,6 +1638,20 @@ def _condition_snapshot_for_task(
             position,
             ("unrealizePnl", "unrealizedPnl", "unrealized_pnl"),
         )
+    elif metric == "baseline_unrealized_pnl":
+        current_price_raw = _current_price_for_position(position, account_payload)
+        if current_price_raw is None or str(current_price_raw).strip() == "":
+            current_value = None
+        else:
+            baseline = task["baseline"]
+            current_value = str(
+                _baseline_unrealized_pnl(
+                    position_side=task["position_side"],
+                    entry_price=Decimal(baseline["entry_price"]),
+                    current_price=_decimal_from_any(current_price_raw, "current_price"),
+                    quantity=Decimal(baseline["quantity"]),
+                )
+            )
     if current_value is None or str(current_value).strip() == "":
         return None
     return {
@@ -1672,7 +1800,7 @@ def render_live_thread_report(
             f"{prefix}\n"
             f"WEEX monitor {task['task_id']} {mode_label} close order submitted: "
             f"{snapshot.get('symbol')} {snapshot.get('position_side')} "
-            f"{snapshot.get('unrealized_pnl')} {snapshot.get('operator')} {snapshot.get('threshold')}. "
+            f"{_trigger_snapshot_value(snapshot)} {snapshot.get('operator')} {snapshot.get('threshold')}. "
             f"Exchange summary: {exchange_response}."
         )
     return (
@@ -1716,7 +1844,7 @@ def render_thread_report(output: dict[str, Any]) -> str:
             f"{prefix}\n"
             f"WEEX monitor {task_id} dry-run triggered: "
             f"{snapshot.get('symbol')} {snapshot.get('position_side')} "
-            f"{snapshot.get('unrealized_pnl')} {snapshot.get('operator')} {snapshot.get('threshold')}. "
+            f"{_trigger_snapshot_value(snapshot)} {snapshot.get('operator')} {snapshot.get('threshold')}. "
             f"Planned close order: {close_order}. "
             f"{authorization_sentence}"
             f"{no_order_sentence}"
@@ -1727,6 +1855,10 @@ def render_thread_report(output: dict[str, Any]) -> str:
         f"{result.get('reason', 'unknown_reason')}. "
         f"{no_order_sentence}"
     )
+
+
+def _trigger_snapshot_value(snapshot: dict[str, Any]) -> Any:
+    return snapshot.get("baseline_unrealized_pnl", snapshot.get("unrealized_pnl"))
 
 
 @contextmanager
@@ -2010,6 +2142,7 @@ def _confirmation_fingerprint(raw_task: dict[str, Any]) -> str:
         "symbol": task["symbol"],
         "position_side": task["position_side"],
         "frequency_seconds": task["frequency_seconds"],
+        "baseline": task.get("baseline"),
         "condition": task["condition"],
         "action": task["action"],
         "callback": task["callback"],
@@ -2111,9 +2244,14 @@ def _normalize_condition(value: Any, task_type: str) -> dict[str, str]:
         raise MonitorInputError("condition must be a JSON object")
 
     metric = _required_string(value, "metric")
-    if metric != "unrealized_pnl":
+    expected_metric = (
+        "baseline_unrealized_pnl"
+        if task_type == ORDER_BASELINE_PNL_MONITOR
+        else "unrealized_pnl"
+    )
+    if metric != expected_metric:
         raise MonitorInputError(
-            f"{task_type} condition metric must be unrealized_pnl. "
+            f"{task_type} condition metric must be {expected_metric}. "
             "Price-threshold closes are not local monitor tasks; use weex-trader-skill "
             "official conditional orders or TP/SL instead."
         )
@@ -2133,7 +2271,22 @@ def _normalize_condition(value: Any, task_type: str) -> dict[str, str]:
     }
 
 
-def _normalize_action(value: Any, position_side: str, task_type: str) -> dict[str, str]:
+def _normalize_baseline(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise MonitorInputError("baseline must be a JSON object")
+    return {
+        "entry_price": _positive_decimal_text(value.get("entry_price"), "baseline.entry_price"),
+        "quantity": _positive_decimal_text(value.get("quantity"), "baseline.quantity"),
+    }
+
+
+def _normalize_action(
+    value: Any,
+    position_side: str,
+    task_type: str,
+    *,
+    baseline: dict[str, str] | None = None,
+) -> dict[str, str]:
     if not isinstance(value, dict):
         raise MonitorInputError("action must be a JSON object")
     action_type = _required_string(value, "type")
@@ -2150,6 +2303,18 @@ def _normalize_action(value: Any, position_side: str, task_type: str) -> dict[st
     quantity = value.get("quantity")
     if quantity is not None and str(quantity).strip() != "":
         action["quantity"] = _positive_decimal_text(quantity, "action.quantity")
+    if task_type == ORDER_BASELINE_PNL_MONITOR:
+        if baseline is None:
+            raise MonitorInputError("baseline is required for order_baseline_pnl_monitor")
+        baseline_quantity = baseline["quantity"]
+        if "quantity" in action:
+            if _decimal_from_any(action["quantity"], "action.quantity") != _decimal_from_any(
+                baseline_quantity,
+                "baseline.quantity",
+            ):
+                raise MonitorInputError("action.quantity must match baseline.quantity")
+        else:
+            action["quantity"] = baseline_quantity
     return action
 
 
@@ -2272,10 +2437,12 @@ def _position_side_label(position_side: str, *, language: str = "zh") -> str:
 def _metric_label(metric: str, *, language: str = "zh") -> str:
     metric_labels = {
         "unrealized_pnl": "未实现盈亏",
+        "baseline_unrealized_pnl": "订单基准估算未实现盈亏",
     }
     if language == "en":
         metric_labels = {
             "unrealized_pnl": "Unrealized PnL",
+            "baseline_unrealized_pnl": "Order-baseline estimated unrealized PnL",
         }
     return metric_labels.get(metric, metric)
 
@@ -2345,6 +2512,37 @@ def _pnl_scope_line(
     position_size = str(position_snapshot.get("quantity") or "unknown")
     action_quantity = action.get("quantity")
 
+    if task["task_type"] == ORDER_BASELINE_PNL_MONITOR:
+        baseline = task["baseline"]
+        baseline_quantity = baseline["quantity"]
+        if language == "en":
+            side_label = _position_side_label(position_side, language=language)
+            base = (
+                f"PnL scope: this monitor evaluates local order-baseline estimated unrealized PnL "
+                f"for {symbol} {side_label}, using baseline entry price {baseline['entry_price']} "
+                f"and baseline quantity {baseline_quantity}; it is not exchange-native isolated "
+                "single-order PnL."
+            )
+            if _decimal_texts_differ(position_size, baseline_quantity):
+                return (
+                    f"{base} The aggregate position size {position_size} differs from baseline quantity "
+                    f"{baseline_quantity}; if triggered, only the baseline quantity will be submitted."
+                )
+            return f"{base} If triggered, the baseline quantity {baseline_quantity} will be submitted."
+
+        side_label = _position_side_label(position_side)
+        base = (
+            f"盈亏口径: 本监控按 {symbol} {side_label} 订单基准估算未实现盈亏触发，"
+            f"基准开仓价 {baseline['entry_price']}，基准数量 {baseline_quantity}；"
+            "这是本地按当前价估算，不是交易所原生单订单盈亏。"
+        )
+        if _decimal_texts_differ(position_size, baseline_quantity):
+            return (
+                f"{base} 聚合持仓数量 {position_size} 与基准数量 {baseline_quantity} 不同；"
+                "触发时只会提交基准数量。"
+            )
+        return f"{base} 触发时会提交基准数量 {baseline_quantity}。"
+
     if language == "en":
         side_label = _position_side_label(position_side, language=language)
         base = (
@@ -2373,11 +2571,18 @@ def _pnl_scope_line(
 
 
 def _position_pnl_summary(
+    task: dict[str, Any],
     action: dict[str, str],
     position_snapshot: dict[str, Any],
     *,
     language: str = "zh"
 ) -> str:
+    if task["task_type"] == ORDER_BASELINE_PNL_MONITOR:
+        baseline_pnl = _baseline_pnl_snapshot_value(task, position_snapshot, language=language)
+        if language == "en":
+            return f"current order-baseline estimated unrealized PnL: {baseline_pnl}"
+        return f"当前基准估算未实现盈亏: {baseline_pnl}"
+
     action_quantity = action.get("quantity")
     total_pnl = _snapshot_value(position_snapshot.get("unrealized_pnl"), language=language)
     if not action_quantity:
@@ -2395,6 +2600,55 @@ def _position_pnl_summary(
         f"聚合持仓总未实现盈亏: {total_pnl}, "
         f"按固定平仓数量 {action_quantity} 折算未实现盈亏: {prorated_pnl}"
     )
+
+
+def _baseline_detail_line(
+    task: dict[str, Any],
+    position_snapshot: dict[str, Any],
+    *,
+    language: str = "zh",
+) -> str:
+    baseline = task["baseline"]
+    current_price = _snapshot_value(position_snapshot.get("current_price"), language=language)
+    baseline_pnl = _baseline_pnl_snapshot_value(task, position_snapshot, language=language)
+    if language == "en":
+        return (
+            "Order baseline: "
+            f"baseline entry price: {baseline['entry_price']}, "
+            f"baseline quantity: {baseline['quantity']}, "
+            f"current price: {current_price}, "
+            f"current order-baseline estimated unrealized PnL: {baseline_pnl}"
+        )
+    return (
+        "订单基准: "
+        f"基准开仓价: {baseline['entry_price']}, "
+        f"基准数量: {baseline['quantity']}, "
+        f"当前价: {current_price}, "
+        f"当前基准估算未实现盈亏: {baseline_pnl}"
+    )
+
+
+def _baseline_pnl_snapshot_value(
+    task: dict[str, Any],
+    position_snapshot: dict[str, Any],
+    *,
+    language: str = "zh",
+) -> str:
+    current_price = position_snapshot.get("current_price")
+    if current_price in (None, "", "未返回", "not returned"):
+        return _missing_value_label(language)
+    try:
+        baseline = task["baseline"]
+        return str(
+            _baseline_unrealized_pnl(
+                position_side=task["position_side"],
+                entry_price=Decimal(baseline["entry_price"]),
+                current_price=_decimal_from_any(current_price, "current_price"),
+                quantity=Decimal(baseline["quantity"]),
+            )
+        )
+    except MonitorInputError:
+        return _missing_value_label(language)
 
 
 def _prorated_pnl_value(
@@ -2497,6 +2751,20 @@ def _compare(left: Decimal, operator: str, right: Decimal) -> bool:
     if operator == "<=":
         return left <= right
     raise MonitorInputError(f"unsupported operator: {operator}")
+
+
+def _baseline_unrealized_pnl(
+    *,
+    position_side: str,
+    entry_price: Decimal,
+    current_price: Decimal,
+    quantity: Decimal,
+) -> Decimal:
+    if position_side == "LONG":
+        return (current_price - entry_price) * quantity
+    if position_side == "SHORT":
+        return (entry_price - current_price) * quantity
+    raise MonitorInputError("position_side must be LONG or SHORT")
 
 
 def _find_position(task: dict[str, Any], positions: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -2656,7 +2924,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "evaluate-pnl":
             task = _read_json_arg(args.task_json, args.task_file, name="task")
             positions = _read_json_arg(args.positions_json, args.positions_file, name="positions")
-            _print_json(evaluate_pnl_task(task, positions))
+            _print_json(evaluate_monitor_task(task, positions))
         elif args.command == "list":
             _print_json(load_tasks())
         elif args.command == "events":

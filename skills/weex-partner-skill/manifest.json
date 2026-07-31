@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "name": "weex-partner-skill",
+    "source_of_truth": "SKILL.md",
+    "purpose": "Natural-language orchestration for seven read-only WEEX Partner query capabilities."
+  },
+  "path_policy": {
+    "skill_root": ".",
+    "resolve_relative_paths_from": "skill root",
+    "portable_paths_only": true
+  },
+  "dependencies": {
+    "required_skills": [
+      "weex-trader-skill"
+    ],
+    "install_order": [
+      "weex-trader-skill",
+      "weex-partner-skill"
+    ]
+  },
+  "routing": {
+    "entrypoint": "scripts/weex_partner_cli.py",
+    "operations": [
+      "list-referral-uids",
+      "get-direct-trade-asset",
+      "get-commission",
+      "get-sub-agent-stats",
+      "verify-referrals",
+      "get-referral-assets",
+      "get-referral-deal-data"
+    ],
+    "rest_owner": "weex-trader-skill",
+    "profile_vault_owner": "weex-trader-skill",
+    "capability_mode": "read_only_query",
+    "origin_policy": {
+      "production_default": "https://api-spot.weex.com",
+      "saved_profile_test_pattern": "https://*.weex.tech",
+      "environment_overrides": "forbidden",
+      "authenticated_redirects": "forbidden"
+    }
+  },
+  "read_order": {
+    "default": [
+      "manifest.json",
+      "SKILL.md"
+    ],
+    "open_if_needed": {
+      "query_policy": "references/partner-query-policy.md",
+      "output_schema": "references/partner-output-schema.md",
+      "field_catalog": "references/partner-field-catalog.json",
+      "natural_language_regression": "references/natural-language-regression.json",
+      "file_level_details": "file-index.json"
+    }
+  },
+  "indexes": {
+    "files": "file-index.json"
+  }
+}

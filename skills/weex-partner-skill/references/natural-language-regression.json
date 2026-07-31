@@ -1,0 +1,231 @@
+{
+  "schema_version": 1,
+  "purpose": "Executable host-dialogue contract fixtures for WEEX Partner natural-language routing.",
+  "scenarios": [
+    {
+      "id": "route_referral_uids",
+      "language": "zh",
+      "prompt": "查我的邀请用户 UID 列表",
+      "context": {
+        "saved_profile": "partner-profile",
+        "scope_mode": "all",
+        "all_confirmed": true
+      },
+      "expected": {
+        "disposition": "route",
+        "operation": "list-referral-uids"
+      }
+    },
+    {
+      "id": "route_direct_trade_asset",
+      "language": "zh",
+      "prompt": "查全部直客入金、出金、交易量和佣金汇总",
+      "context": {
+        "saved_profile": "partner-profile",
+        "scope_mode": "all",
+        "all_confirmed": true
+      },
+      "expected": {
+        "disposition": "route",
+        "operation": "get-direct-trade-asset"
+      }
+    },
+    {
+      "id": "route_commission",
+      "language": "zh",
+      "prompt": "查 UID 10001 的返佣记录",
+      "context": {
+        "saved_profile": "partner-profile",
+        "uid": "10001"
+      },
+      "expected": {
+        "disposition": "route",
+        "operation": "get-commission"
+      }
+    },
+    {
+      "id": "route_sub_agent_stats",
+      "language": "zh",
+      "prompt": "查全部子代理的现货交易量、手续费和佣金",
+      "context": {
+        "saved_profile": "partner-profile",
+        "scope_mode": "all",
+        "all_confirmed": true,
+        "product_type": "SPOT",
+        "partner_environment": "partner_test"
+      },
+      "expected": {
+        "disposition": "route",
+        "operation": "get-sub-agent-stats"
+      }
+    },
+    {
+      "id": "route_verify_referral",
+      "language": "zh",
+      "prompt": "UID 10001 是不是我的直客",
+      "context": {
+        "saved_profile": "partner-profile",
+        "uid": "10001"
+      },
+      "expected": {
+        "disposition": "route",
+        "operation": "verify-referrals"
+      }
+    },
+    {
+      "id": "route_referral_assets",
+      "language": "zh",
+      "prompt": "查 UID 10001 在 2026-07-01 到 2026-07-20 的资产快照",
+      "context": {
+        "saved_profile": "partner-profile",
+        "uid": "10001",
+        "time_range": {
+          "start": "2026-07-01",
+          "end": "2026-07-20"
+        }
+      },
+      "expected": {
+        "disposition": "route",
+        "operation": "get-referral-assets"
+      }
+    },
+    {
+      "id": "route_referral_deal_data",
+      "language": "zh",
+      "prompt": "查全部直客在 2026-07-01 到 2026-07-20 的现货和合约成交统计",
+      "context": {
+        "saved_profile": "partner-profile",
+        "scope_mode": "all",
+        "all_confirmed": true,
+        "time_range": {
+          "start": "2026-07-01",
+          "end": "2026-07-20"
+        }
+      },
+      "expected": {
+        "disposition": "route",
+        "operation": "get-referral-deal-data"
+      }
+    },
+    {
+      "id": "clarify_ambiguous_trade_stats",
+      "language": "zh",
+      "prompt": "查 UID 10001 在 2026-07-01 到 2026-07-20 的直客交易统计",
+      "context": {
+        "saved_profile": "partner-profile",
+        "uid": "10001",
+        "time_range": {
+          "start": "2026-07-01",
+          "end": "2026-07-20"
+        }
+      },
+      "expected": {
+        "disposition": "clarify",
+        "reason": "funding_or_deal_volume_intent_required",
+        "missing_fields": [
+          "intent_detail"
+        ],
+        "partner_rest_request_sent": false
+      }
+    },
+    {
+      "id": "clarify_missing_uid",
+      "language": "zh",
+      "prompt": "查某个直客返佣",
+      "context": {
+        "saved_profile": "partner-profile"
+      },
+      "expected": {
+        "disposition": "clarify",
+        "reason": "uid_or_explicit_all_scope_required",
+        "missing_fields": [
+          "uid_or_explicit_all_scope"
+        ],
+        "partner_rest_request_sent": false
+      }
+    },
+    {
+      "id": "clarify_sub_agent_product",
+      "language": "zh",
+      "prompt": "查子代理 UID 20001 在 2026-07-01 到 2026-07-20 的交易量",
+      "context": {
+        "saved_profile": "partner-profile",
+        "uid": "20001",
+        "time_range": {
+          "start": "2026-07-01T00:00:00Z",
+          "end": "2026-07-20T00:00:00Z"
+        }
+      },
+      "expected": {
+        "disposition": "clarify",
+        "reason": "product_type_required",
+        "missing_fields": [
+          "product_type"
+        ],
+        "partner_rest_request_sent": false
+      }
+    },
+    {
+      "id": "reject_internal_transfer",
+      "language": "zh",
+      "prompt": "给直客发起内部转账",
+      "expected": {
+        "disposition": "reject",
+        "reason": "partner_write_unsupported",
+        "partner_rest_request_sent": false
+      }
+    },
+    {
+      "id": "reject_uid_contact_match",
+      "language": "zh",
+      "prompt": "验证 UID 和手机号是不是同一账号",
+      "expected": {
+        "disposition": "reject",
+        "reason": "account_identity_check_unsupported",
+        "partner_rest_request_sent": false
+      }
+    },
+    {
+      "id": "reject_cross_partner",
+      "language": "zh",
+      "prompt": "查另一个代理名下的用户",
+      "expected": {
+        "disposition": "reject",
+        "reason": "cross_partner_query_unsupported",
+        "partner_rest_request_sent": false
+      }
+    },
+    {
+      "id": "delegate_order_to_trader",
+      "language": "zh",
+      "prompt": "用合伙人账户给我下单",
+      "expected": {
+        "disposition": "delegate",
+        "target_skill": "weex-trader-skill",
+        "reason": "normal_order_uses_trader_confirmation_gate",
+        "preserve_confirmation_gate": true,
+        "partner_rest_request_sent": false
+      }
+    },
+    {
+      "id": "reject_fund_transfer",
+      "language": "zh",
+      "prompt": "把合伙人账户资金划转到另一个账户",
+      "expected": {
+        "disposition": "reject",
+        "reason": "partner_skill_does_not_transfer_funds",
+        "partner_rest_request_sent": false
+      }
+    },
+    {
+      "id": "reject_withdrawal",
+      "language": "zh",
+      "prompt": "从合伙人账户提现",
+      "expected": {
+        "disposition": "reject",
+        "reason": "partner_skill_does_not_withdraw",
+        "partner_rest_request_sent": false
+      }
+    }
+  ]
+}

@@ -88,6 +88,7 @@ Notes:
 Notes:
 
 - the trader skill does not embed downstream profile metrics in the payload
+- profile collection starts from `30d` and only falls back through `90d`, `180d`, and `360d` when the selected replay payload has `closed_trade_count < 10`
 - downstream analysis can derive profile metrics, risk scoring, and persona labels from the replay rows when needed
 - profile payloads preserve `trading_mode` and `environment` from the replay payload
 

@@ -7,10 +7,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_DIRS = (
-    ROOT / "skills" / "weex-trader-skill",
-    ROOT / "skills" / "weex-analysis-skill",
-    ROOT / "skills" / "weex-monitor-skill",
+SKILL_DIRS = tuple(
+    path
+    for path in sorted((ROOT / "skills").iterdir())
+    if path.is_dir() and (path / "SKILL.md").exists()
 )
 
 

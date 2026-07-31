@@ -573,7 +573,12 @@ def build_agent_init_state(preferred_language: str | None = None) -> dict[str, A
     }
 
 
-def build_agent_runtime_state(preferred_language: str | None = None, command: Optional[str] = None) -> dict[str, Any]:
+def build_agent_runtime_state(
+    preferred_language: str | None = None,
+    command: Optional[str] = None,
+    *,
+    probe_default_profile_usable: bool = True,
+) -> dict[str, Any]:
     resolved_language, _language_source = resolve_language_with_source(preferred_language)
     os_family = platform.system()
     requirements_ready, missing_modules = _probe_required_modules()
@@ -622,7 +627,11 @@ def build_agent_runtime_state(preferred_language: str | None = None, command: Op
             "count": metadata_summary["count"],
             "default_profile_id": metadata_summary["default_profile_id"],
             "default_profile_name": metadata_summary["default_profile_name"],
-            "default_profile_usable": _probe_default_profile_usable(store, metadata_summary["default_profile_id"]),
+            "default_profile_usable": (
+                _probe_default_profile_usable(store, metadata_summary["default_profile_id"])
+                if probe_default_profile_usable
+                else None
+            ),
         },
     }
 
@@ -633,16 +642,34 @@ def refresh_agent_init_state(preferred_language: str | None = None) -> dict[str,
     return payload
 
 
-def refresh_agent_runtime_state(preferred_language: str | None = None, command: Optional[str] = None) -> dict[str, Any]:
-    payload = build_agent_runtime_state(preferred_language=preferred_language, command=command)
+def refresh_agent_runtime_state(
+    preferred_language: str | None = None,
+    command: Optional[str] = None,
+    *,
+    probe_default_profile_usable: bool = True,
+) -> dict[str, Any]:
+    payload = build_agent_runtime_state(
+        preferred_language=preferred_language,
+        command=command,
+        probe_default_profile_usable=probe_default_profile_usable,
+    )
     _atomic_write_json(agent_runtime_path(), payload)
     return payload
 
 
-def refresh_agent_records(preferred_language: str | None = None, command: Optional[str] = None) -> dict[str, dict[str, Any]]:
+def refresh_agent_records(
+    preferred_language: str | None = None,
+    command: Optional[str] = None,
+    *,
+    probe_default_profile_usable: bool = True,
+) -> dict[str, dict[str, Any]]:
     return {
         "init": refresh_agent_init_state(preferred_language=preferred_language),
-        "runtime": refresh_agent_runtime_state(preferred_language=preferred_language, command=command),
+        "runtime": refresh_agent_runtime_state(
+            preferred_language=preferred_language,
+            command=command,
+            probe_default_profile_usable=probe_default_profile_usable,
+        ),
     }
 
 

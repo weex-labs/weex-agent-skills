@@ -73,6 +73,32 @@
         "place-order"
       ]
     },
+    "scripts/weex_partner_api.py": {
+      "role": "Strict read-only executor for the seven allowlisted WEEX Partner endpoints plus a transcript-safe Partner profile preflight, using the production default or a saved HTTPS `*.weex.tech` test origin.",
+      "when": [
+        "executing structured Partner queries from weex-partner-skill",
+        "validating and classifying the Partner production or test origin before credential loading",
+        "normalizing Partner authentication, permission, validation, rate-limit, upstream, and transport errors"
+      ],
+      "depends_on": [
+        "references/partner-api-definitions.json",
+        "scripts/weex_profile_store.py",
+        "scripts/weex_agent_state.py",
+        "scripts/weex_url_policy.py"
+      ],
+      "surface": [
+        "list-endpoints",
+        "preflight --profile <saved-profile>",
+        "execute via stdin JSON"
+      ]
+    },
+    "references/partner-api-definitions.json": {
+      "role": "Single allowlist source for the seven authenticated read-only Partner REST operations.",
+      "when": [
+        "checking Partner methods, paths, weights, and accepted parameters",
+        "verifying that no Partner write endpoint is exposed"
+      ]
+    },
     "scripts/weex_profile_store.py": {
       "role": "Shared profile metadata and application-vault backend.",
       "when": [

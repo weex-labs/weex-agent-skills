@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "purpose": "File-level guide for the WEEX Partner skill.",
+  "file_guide": {
+    "scripts/weex_partner_cli.py": {
+      "role": "Deterministic seven-operation orchestration, validation, paging, Decimal aggregation, environment-bound continuation, and trader subprocess protocol."
+    },
+    "references/partner-query-policy.md": {
+      "role": "Scope, time, paging, batching, and completeness rules."
+    },
+    "references/partner-output-schema.md": {
+      "role": "Stable result envelope and user-visible completeness fields."
+    },
+    "references/partner-field-catalog.json": {
+      "role": "Official request and response field names, types, verbatim Chinese and English descriptions, structural roles, and internal alias boundaries for all seven Partner operations."
+    },
+    "references/natural-language-regression.json": {
+      "role": "Machine-readable host-dialogue routing, clarification, and rejection regression fixtures."
+    },
+    "tests/test_weex_partner_cli.py": {
+      "role": "Executable query-policy and orchestration contract tests."
+    },
+    "tests/test_docs_consistency.py": {
+      "role": "Skill instruction, manifest, natural-language fixture, reference, and file-index consistency tests."
+    }
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "contract_version": "partner-v3-2026-06-22",
+  "base_url": "https://api-spot.weex.com",
+  "base_url_role": "production_default",
+  "saved_profile_test_origin_pattern": "https://*.weex.tech",
+  "definitions": [
+    {
+      "key": "partner.get-affiliate-uids",
+      "category": "partner",
+      "title": "Get affiliate UIDs",
+      "method": "GET",
+      "path": "/api/v3/rebate/affiliate/getAffiliateUIDs",
+      "requires_auth": true,
+      "operation_class": "read",
+      "weight": 20,
+      "query_fields": ["uid", "startTime", "endTime", "page", "pageSize"],
+      "body_fields": [],
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetAffiliateUIDs"
+    },
+    {
+      "key": "partner.get-channel-user-trade-and-asset",
+      "category": "partner",
+      "title": "Get channel user trade and asset data",
+      "method": "GET",
+      "path": "/api/v3/rebate/affiliate/getChannelUserTradeAndAsset",
+      "requires_auth": true,
+      "operation_class": "read",
+      "weight": 20,
+      "query_fields": ["uid", "startTime", "endTime", "page", "pageSize"],
+      "body_fields": [],
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetChannelUserTradeAndAsset"
+    },
+    {
+      "key": "partner.get-affiliate-commission",
+      "category": "partner",
+      "title": "Get affiliate commission records",
+      "method": "GET",
+      "path": "/api/v3/rebate/affiliate/getAffiliateCommission",
+      "requires_auth": true,
+      "operation_class": "read",
+      "weight": 20,
+      "query_fields": ["uid", "startTime", "endTime", "coin", "productType", "page", "pageSize"],
+      "body_fields": [],
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetAffiliateCommission"
+    },
+    {
+      "key": "partner.query-sub-channel-transactions",
+      "category": "partner",
+      "title": "Query sub-channel transactions",
+      "method": "POST",
+      "path": "/api/v3/rebate/affiliate/querySubChannelTransactions",
+      "requires_auth": true,
+      "operation_class": "read",
+      "weight": 10,
+      "query_fields": [],
+      "body_fields": ["subUid", "startTime", "endTime", "productType", "pageNum", "pageSize"],
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/QuerySubChannelTransactions"
+    },
+    {
+      "key": "partner.verify-referrals",
+      "category": "partner",
+      "title": "Verify referrals",
+      "method": "GET",
+      "path": "/api/v3/agency/verifyReferrals",
+      "requires_auth": true,
+      "operation_class": "read",
+      "weight": 10,
+      "query_fields": ["userIds"],
+      "body_fields": [],
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/VerifyReferrals"
+    },
+    {
+      "key": "partner.get-referral-assets",
+      "category": "partner",
+      "title": "Get referral assets",
+      "method": "GET",
+      "path": "/api/v3/agency/getAssert",
+      "requires_auth": true,
+      "operation_class": "read",
+      "weight": 10,
+      "query_fields": ["userId", "startTime", "endTime"],
+      "body_fields": [],
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetAffiliateAssets"
+    },
+    {
+      "key": "partner.get-referral-deal-data",
+      "category": "partner",
+      "title": "Get referral deal data",
+      "method": "GET",
+      "path": "/api/v3/agency/getDealData",
+      "requires_auth": true,
+      "operation_class": "read",
+      "weight": 10,
+      "query_fields": ["userIds", "startTime", "endTime"],
+      "body_fields": [],
+      "doc_url": "https://www.weex.com/api-doc/zh-CN/partner/rebate-endpoints/GetAffiliateDealData"
+    }
+  ]
+}

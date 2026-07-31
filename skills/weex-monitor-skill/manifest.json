@@ -3,7 +3,7 @@
   "identity": {
     "name": "weex-monitor-skill",
     "source_of_truth": "SKILL.md",
-    "purpose": "WEEX automated monitor orchestration for position PnL monitoring with delegated live or demo close."
+    "purpose": "WEEX automated monitor orchestration for position PnL and order-baseline PnL monitoring with delegated live or demo close."
   },
   "path_policy": {
     "skill_root": ".",
@@ -24,6 +24,7 @@
   "routing": {
     "decision_axes": [
       "task_type: position_pnl_monitor",
+      "task_type: order_baseline_pnl_monitor",
       "trigger_source: local PnL evaluation or bounded live loop",
       "execution_boundary: dry-run/plan-only or live/demo execution delegated through weex-trader-skill guard commands"
     ],
@@ -35,7 +36,7 @@
           "confirm-text",
           "confirm-text-live"
         ],
-        "mutating": "confirm-text writes local draft confirmation state only; confirm-text-live first collects a matching live or demo position through weex-trader-skill and then writes local draft confirmation state"
+        "mutating": "confirm-text writes local draft confirmation state only; confirm-text-live first collects a matching live or demo position through weex-trader-skill and then writes local draft confirmation state for supported PnL monitor task types"
       },
       "task_confirmation": {
         "entrypoint": "scripts/weex_monitor_cli.py",
@@ -64,7 +65,7 @@
           "run-loop --confirm-demo",
           "confirm-and-run-loop"
         ],
-        "mutating": "delegated live or demo market close through weex-trader-skill; confirmed-task lookup and local active-to-executing claim prevent unconfirmed or duplicate runner submission; confirm-and-run-loop consumes a trading-mode-bound monitor confirmation token and starts a duration-bounded account loop from one combined user confirmation",
+        "mutating": "delegated live or demo market close through weex-trader-skill; confirmed-task lookup and local active-to-executing claim prevent unconfirmed or duplicate runner submission; confirm-and-run-loop consumes a trading-mode-bound monitor confirmation token and starts a duration-bounded account loop from one combined user confirmation for supported PnL monitor task types",
         "requires": [
           "--confirm-monitor and --confirmation-token for confirm-and-run-loop",
           "--confirm-live or --confirm-demo matching task trading_mode",
