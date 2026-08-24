@@ -28,7 +28,7 @@ SUPPORTED_AGENTS = {
 }
 AGENT_HINTS = {
     "claude": "Use --agent claude-code for Claude Code.",
-    "openclaw": "OpenClaw requires its native 'openclaw skills install' command; install trader before partner.",
+    "openclaw": "Use skills/weex-trader-skill/scripts/update_openclaw_skills.sh for the Git + symlink workflow.",
 }
 ROOT_METADATA_FILES = (
     Path("README.md"),

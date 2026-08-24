@@ -46,6 +46,7 @@ Use `references/natural-language-regression.json` as the executable host-dialogu
 - Require a saved profile reference from the current conversation. Let trader load credentials from Vault.
 - Missing UID must never silently mean all referrals. Require `scope.mode=all` and `all_confirmed=true` for an all-referrals query.
 - Ask only for missing required fields, such as `product_type`, UID, or explicit start/end.
+- For `get-commission`, the optional `coin` filter accepts only `USDT` or `BTC`; reject every other value locally before any Partner REST request.
 - When the official contract supplies multiple legal ranges and time is omitted, use its smallest range. State the default basis and actual UTC start/end. Explicit valid user time takes priority.
 - If only a maximum/history limit is known and no minimum is published, require explicit start/end.
 - A bounded explicit `get-commission` range longer than three calendar months is the PRD exception: query only its latest three-calendar-month segment, then offer the exact returned earlier-time action until the user's original start is reached. Commission continuation actions are closed millisecond ranges; the earlier segment ends one millisecond before the current segment starts. Do not infer an unbounded history limit; an upstream rejection stops fail-closed.
@@ -90,3 +91,7 @@ For Chinese output, convert returned millisecond timestamps to `YYYY-MM-DD HH:mm
 Unknown response field values, including nested values under otherwise known containers, stay hidden. A nested value in a documented scalar field is a schema failure; only documented container fields such as referral-asset `depositList` may be summarized as hidden count metadata. A 429 or insufficient remaining weight stops immediately with no automatic retry. Interrupted offset pagination must restart from page 1 for any complete result, and the user-facing result must warn that data may change while pages are being fetched or after a restart.
 
 The Skill does not persist Partner business responses itself. The host chat or tool transcript can still retain query inputs and outputs; do not promise automatic retention, access, or deletion behavior on behalf of Codex, Claude Code, Cursor, GitHub Copilot, or OpenClaw.
+
+## Maintenance
+
+After changing the Partner endpoint contract, run the independent read-only official drift check from this skill directory: `python3 scripts/check_official_partner_contract.py --pretty`. It fetches both Chinese and English official pages for all seven supported operations and compares method, path, request transport, request/response fields, types, required flags, descriptions, and weight with the checked-in Partner catalog and trader definitions. A nonzero exit means the checked-in contract must be reviewed; the checker never sends authenticated or mutating requests.

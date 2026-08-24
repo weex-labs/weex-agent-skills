@@ -35,15 +35,22 @@ SPOT_GROUP_MAP = {
     "MarketDataAPI": "market",
     "AccountAPI": "account",
     "orderApi": "order",
-    "rebate-endpoints": "rebate",
+    "tax": "tax",
 }
 
 KEY_OVERRIDES = {
     ("spot", "GetAllProductInfo"): "spot.config.get_api_trading_symbols",
 }
 
+DEMO_KEY_MAP = {
+    "GetAccountBalance": "sim.account.get_account_balance",
+    "GetAllPositions": "sim.account.get_all_positions",
+    "GetOrderHistory": "sim.transaction.get_order_history",
+    "PlaceOrder": "sim.transaction.place_order",
+}
+
 EXCLUDED_DOC_URLS = {
-    "https://www.weex.com/api-doc/spot/rebate-endpoints/GetInternalWithdrawalStatus",
+    "https://www.weex.com/api-doc/partner/rebate-endpoints/GetInternalWithdrawalStatus",
 }
 
 
@@ -58,185 +65,23 @@ class ParsedDoc:
     doc_url: str
     requires_auth: bool
     weight_ip: Optional[int]
-    weight_uid: Optional[int]
+    rate_limits: List[Dict[str, Any]]
     request_params: List[Dict[str, str]]
     response_params: List[Dict[str, str]]
+    constraints: List[str]
+    request_transport: str
+    query_fields: List[str]
+    body_fields: List[str]
+    response_container: str
     permission: Optional[str] = None
-
-
-CONTRACT_DEMO_SOURCE = "https://www.weex.com/api-doc/zh-CN/contract/intro"
-
-CONTRACT_DEMO_BALANCE_FIELDS = [
-    {"name": "asset", "type": "String", "description": "Asset name."},
-    {"name": "balance", "type": "String", "description": "Total balance."},
-    {"name": "availableBalance", "type": "String", "description": "Available balance."},
-    {"name": "frozen", "type": "String", "description": "Frozen amount."},
-    {"name": "unrealizePnl", "type": "String", "description": "Unrealized profit and loss."},
-]
-
-CONTRACT_DEMO_ORDER_REQUEST = [
-    {"name": "symbol", "type": "String", "required": "Yes", "description": "Trading pair, for example BTCSUSDT."},
-    {"name": "side", "type": "String", "required": "Yes", "description": "Order side. Supported values: BUY, SELL."},
-    {"name": "positionSide", "type": "String", "required": "Yes", "description": "Position side. Supported values: LONG, SHORT."},
-    {"name": "type", "type": "String", "required": "Yes", "description": "Order type. Demo order supports LIMIT and MARKET."},
-    {"name": "timeInForce", "type": "String", "required": "Conditional", "description": "Required when type = LIMIT. Supported values: GTC, IOC, FOK, POST_ONLY."},
-    {"name": "quantity", "type": "String", "required": "Yes", "description": "Order quantity. Must be greater than 0."},
-    {"name": "price", "type": "String", "required": "Conditional", "description": "Limit price. Required when type = LIMIT."},
-    {"name": "newClientOrderId", "type": "String", "required": "Yes", "description": "Client-defined order ID, 1-36 chars matching ^[.A-Z:/a-z0-9_-]{1,36}$."},
-    {"name": "tpTriggerPrice", "type": "String", "required": "No", "description": "Optional take-profit trigger price."},
-    {"name": "slTriggerPrice", "type": "String", "required": "No", "description": "Optional stop-loss trigger price."},
-    {"name": "TpWorkingType", "type": "String", "required": "No", "description": "Take-profit trigger price source. Preserve this official field casing."},
-    {"name": "SlWorkingType", "type": "String", "required": "No", "description": "Stop-loss trigger price source. Preserve this official field casing."},
-]
-
-CONTRACT_DEMO_ORDER_RESPONSE = [
-    {"name": "orderId", "type": "String", "description": "Order ID assigned by the system."},
-    {"name": "clientOrderId", "type": "String", "description": "Echo of newClientOrderId."},
-    {"name": "success", "type": "Boolean", "description": "Whether the order request was accepted."},
-    {"name": "errorCode", "type": "String", "description": "Error code when success = false; otherwise empty."},
-    {"name": "errorMessage", "type": "String", "description": "Error message when success = false; otherwise empty."},
-]
-
-CONTRACT_DEMO_POSITION_FIELDS = [
-    {"name": "id", "type": "Long", "description": "Position ID."},
-    {"name": "asset", "type": "String", "description": "Associated collateral asset."},
-    {"name": "symbol", "type": "String", "description": "Trading pair."},
-    {"name": "side", "type": "String", "description": "Position direction such as LONG or SHORT."},
-    {"name": "marginType", "type": "String", "description": "Margin mode: CROSSED or ISOLATED."},
-    {"name": "separatedMode", "type": "String", "description": "Position separation mode: COMBINED or SEPARATED."},
-    {"name": "separatedOpenOrderId", "type": "Long", "description": "Separated-position open order ID."},
-    {"name": "leverage", "type": "String", "description": "Position leverage."},
-    {"name": "size", "type": "String", "description": "Current position size."},
-    {"name": "openValue", "type": "String", "description": "Open position value."},
-    {"name": "openFee", "type": "String", "description": "Open fee."},
-    {"name": "fundingFee", "type": "String", "description": "Funding fee."},
-    {"name": "marginSize", "type": "String", "description": "Margin amount in the collateral asset."},
-    {"name": "isolatedMargin", "type": "String", "description": "Isolated margin amount."},
-    {"name": "isAutoAppendIsolatedMargin", "type": "Boolean", "description": "Whether automatic isolated-margin append is enabled."},
-    {"name": "cumOpenSize", "type": "String", "description": "Cumulative open size."},
-    {"name": "cumOpenValue", "type": "String", "description": "Cumulative open value."},
-    {"name": "cumOpenFee", "type": "String", "description": "Cumulative open fee."},
-    {"name": "cumCloseSize", "type": "String", "description": "Cumulative close size."},
-    {"name": "cumCloseValue", "type": "String", "description": "Cumulative close value."},
-    {"name": "cumCloseFee", "type": "String", "description": "Cumulative close fee."},
-    {"name": "cumFundingFee", "type": "String", "description": "Cumulative settled funding fee."},
-    {"name": "cumLiquidateFee", "type": "String", "description": "Cumulative liquidation fee."},
-    {"name": "createdMatchSequenceId", "type": "Long", "description": "Match engine sequence ID at creation."},
-    {"name": "updatedMatchSequenceId", "type": "Long", "description": "Latest match engine sequence ID."},
-    {"name": "createdTime", "type": "Long", "description": "Creation time in Unix milliseconds."},
-    {"name": "updatedTime", "type": "Long", "description": "Update time in Unix milliseconds."},
-    {"name": "unrealizePnl", "type": "String", "description": "Unrealized profit and loss."},
-    {"name": "liquidatePrice", "type": "String", "description": "Estimated liquidation price; 0 means no current liquidation risk."},
-]
-
-CONTRACT_DEMO_HISTORY_REQUEST = [
-    {
-        "name": "symbol",
-        "type": "String",
-        "required": "No",
-        "description": (
-            "Optional trading pair filter. Omit by default for demo history because normal "
-            "contract symbols such as BTCUSDT may be rejected unless the API accepts the "
-            "exact simulated symbol filter."
-        ),
-    },
-    {"name": "limit", "type": "Integer", "required": "No", "description": "Number of records per page, 1-1000. Default 500."},
-    {"name": "startTime", "type": "Long", "required": "No", "description": "Start time in Unix milliseconds. Must be less than or equal to endTime."},
-    {"name": "endTime", "type": "Long", "required": "No", "description": "End time in Unix milliseconds. Must be within 90 days of startTime."},
-    {"name": "page", "type": "Integer", "required": "No", "description": "Page index starting from 0. Default 0."},
-]
-
-CONTRACT_DEMO_HISTORY_RESPONSE = [
-    {"name": "avgPrice", "type": "String", "description": "Average fill price."},
-    {"name": "clientOrderId", "type": "String", "description": "Client-defined order ID."},
-    {"name": "cumQuote", "type": "String", "description": "Cumulative filled amount in the quote asset."},
-    {"name": "executedQty", "type": "String", "description": "Filled quantity in the base asset."},
-    {"name": "orderId", "type": "Long", "description": "System order ID."},
-    {"name": "origQty", "type": "String", "description": "Original order quantity."},
-    {"name": "price", "type": "String", "description": "Order price."},
-    {"name": "reduceOnly", "type": "Boolean", "description": "Whether the order is reduce-only."},
-    {"name": "side", "type": "String", "description": "Order side."},
-    {"name": "positionSide", "type": "String", "description": "Position side."},
-    {"name": "status", "type": "String", "description": "Order status."},
-    {"name": "stopPrice", "type": "String", "description": "Trigger or stop price when applicable."},
-    {"name": "symbol", "type": "String", "description": "Trading pair."},
-    {"name": "time", "type": "Long", "description": "Order time in Unix milliseconds."},
-    {"name": "timeInForce", "type": "String", "description": "Time-in-force policy."},
-    {"name": "type", "type": "String", "description": "Order type."},
-    {"name": "updateTime", "type": "Long", "description": "Last update time in Unix milliseconds."},
-    {"name": "workingType", "type": "String", "description": "Trigger price source."},
-]
-
-CONTRACT_DEMO_ENDPOINTS = (
-    {
-        "key": "sim.account.get_account_balance",
-        "title": "Get Demo Account Balance (USER_DATA)",
-        "method": "GET",
-        "path": "/capi/v3/sim/balance",
-        "permission": "USER_DATA",
-        "weight_ip": 5,
-        "weight_uid": 10,
-        "response_params": CONTRACT_DEMO_BALANCE_FIELDS,
-    },
-    {
-        "key": "sim.account.get_all_positions",
-        "title": "Get Demo All Positions (USER_DATA)",
-        "method": "GET",
-        "path": "/capi/v3/sim/position/allPosition",
-        "permission": "USER_DATA",
-        "weight_ip": 10,
-        "weight_uid": 15,
-        "response_params": CONTRACT_DEMO_POSITION_FIELDS,
-    },
-    {
-        "key": "sim.transaction.get_order_history",
-        "title": "Get Demo Order History (USER_DATA)",
-        "method": "GET",
-        "path": "/capi/v3/sim/order/history",
-        "permission": "USER_DATA",
-        "weight_ip": 10,
-        "weight_uid": 10,
-        "request_params": CONTRACT_DEMO_HISTORY_REQUEST,
-        "response_params": CONTRACT_DEMO_HISTORY_RESPONSE,
-    },
-    {
-        "key": "sim.transaction.place_order",
-        "title": "Place Demo Order (TRADE)",
-        "method": "POST",
-        "path": "/capi/v3/sim/order",
-        "permission": "TRADE",
-        "weight_ip": 2,
-        "weight_uid": 5,
-        "request_params": CONTRACT_DEMO_ORDER_REQUEST,
-        "response_params": CONTRACT_DEMO_ORDER_RESPONSE,
-    },
-)
-
-
-def build_contract_demo_docs() -> List[ParsedDoc]:
-    return [
-        ParsedDoc(
-            product="contract",
-            key=definition["key"],
-            title=definition["title"],
-            category="sim",
-            method=definition["method"],
-            path=definition["path"],
-            doc_url=CONTRACT_DEMO_SOURCE,
-            requires_auth=True,
-            weight_ip=definition["weight_ip"],
-            weight_uid=definition["weight_uid"],
-            request_params=definition.get("request_params", []),
-            response_params=definition["response_params"],
-            permission=definition["permission"],
-        )
-        for definition in CONTRACT_DEMO_ENDPOINTS
-    ]
 
 
 def fetch_text(url: str) -> str:
     response = requests.get(url, timeout=DOC_TIMEOUT)
     response.raise_for_status()
+    # Docusaurus pages are UTF-8, but requests can otherwise guess ISO-8859-1
+    # when the origin omits a charset.  That corrupts symbols such as >= and ->.
+    response.encoding = "utf-8"
     return response.text
 
 
@@ -262,57 +107,261 @@ def clean_text(text: str) -> str:
     return text
 
 
-def parse_weight(text: str) -> tuple[Optional[int], Optional[int]]:
-    ip = None
-    uid = None
-    ip_match = re.search(r"Weight\(IP\):\s*(\d+)", text)
-    uid_match = re.search(r"Weight\(UID\):\s*(\d+)", text)
+def parse_rate_limits(text: str) -> tuple[Optional[int], List[Dict[str, Any]]]:
+    weight_ip = None
+    ip_match = re.search(r"Weight\(IP\):\s*(\d+)", text, flags=re.IGNORECASE)
     if ip_match:
-        ip = int(ip_match.group(1))
-    if uid_match:
-        uid = int(uid_match.group(1))
-    return ip, uid
+        weight_ip = int(ip_match.group(1))
+
+    limits: List[Dict[str, Any]] = []
+    for match in re.finditer(
+        r"(\d+)\s+on\s+[^;]*?\((X-[A-Z0-9-]+)\)",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        limits.append({"header": match.group(2).upper(), "limit": int(match.group(1))})
+    return weight_ip, limits
 
 
 def get_group(product: str, path_parts: List[str]) -> Optional[str]:
+    if product == "contract" and len(path_parts) > 2 and path_parts[2] == "demo":
+        return "sim"
+    if product == "spot" and len(path_parts) > 2 and path_parts[1] == "partner":
+        return "rebate"
     group_segment = path_parts[2] if len(path_parts) > 2 else ""
     if product == "contract":
         return CONTRACT_GROUP_MAP.get(group_segment)
     return SPOT_GROUP_MAP.get(group_segment)
 
 
-def extract_table_rows(container: Tag) -> List[Dict[str, str]]:
-    table = container.find("table")
+def _table_prefix(caption: str) -> Optional[str]:
+    caption = clean_text(caption)
+    match = re.search(r"\(([A-Za-z][A-Za-z0-9_.-]*\[\])\)", caption)
+    if match:
+        return match.group(1)
+    match = re.search(r"(?:element|item)\s+of\s+([A-Za-z][A-Za-z0-9_.-]*)", caption, re.IGNORECASE)
+    if match:
+        return f"{match.group(1)}[]"
+    return None
+
+
+def _canonical_header(header: str) -> Optional[str]:
+    normalized = clean_text(header).rstrip("?").lower()
+    aliases = {
+        "parameter": "name",
+        "parameter name": "name",
+        "name": "name",
+        "field": "name",
+        "field name": "name",
+        "index": "name",
+        "参数": "name",
+        "参数名": "name",
+        "字段": "name",
+        "字段名": "name",
+        "索引": "name",
+        "下标": "name",
+        "type": "type",
+        "parameter type": "type",
+        "类型": "type",
+        "参数类型": "type",
+        "required": "required",
+        "required?": "required",
+        "是否必填": "required",
+        "是否必须": "required",
+        "description": "description",
+        "meaning": "description",
+        "说明": "description",
+        "描述": "description",
+        "字段说明": "description",
+        "含义": "description",
+    }
+    return aliases.get(normalized)
+
+
+def _prefixed_name(raw_name: str, *, prefix: Optional[str], parent: Optional[str]) -> tuple[str, bool]:
+    raw_name = clean_text(raw_name)
+    nested = bool(re.match(r"^(?:->|→|>|›)+", raw_name))
+    name = re.sub(r"^(?:->|→|>|›)+\s*", "", raw_name).strip()
+    if nested and parent:
+        return f"{parent}.{name}", nested
+    if prefix and not name.startswith(f"{prefix}.") and name != prefix:
+        return f"{prefix}.{name}", nested
+    return name, nested
+
+
+def extract_table_rows(container: Tag, *, prefix: Optional[str] = None) -> List[Dict[str, str]]:
+    table = container if container.name == "table" else container.find("table")
     if table is None:
         return []
     rows = table.find_all("tr")
     if not rows:
         return []
-    headers = [
-        clean_text(cell.get_text(" ", strip=True))
-        for cell in rows[0].find_all(["th", "td"])
-    ]
+    headers = [_canonical_header(cell.get_text(" ", strip=True)) for cell in rows[0].find_all(["th", "td"])]
     results: List[Dict[str, str]] = []
+    parent: Optional[str] = None
     for row in rows[1:]:
         cells = row.find_all(["td", "th"])
         if not cells:
             continue
         values = [clean_text(cell.get_text(" ", strip=True)) for cell in cells]
         item: Dict[str, str] = {}
-        for idx, header in enumerate(headers):
-            key = header.lower().replace("?", "")
+        for idx, key in enumerate(headers):
+            if key is None:
+                continue
             value = values[idx] if idx < len(values) else ""
-            if key.startswith("parameter") or key.startswith("name") or key.startswith("field"):
-                item["name"] = value
-            elif key.startswith("type"):
-                item["type"] = value
-            elif key.startswith("required"):
-                item["required"] = value
-            elif key.startswith("description"):
-                item["description"] = value
+            item[key] = value
+        if "name" in item:
+            name, nested = _prefixed_name(item["name"], prefix=prefix, parent=parent)
+            item["name"] = name
+            if not nested and not prefix and "array" in item.get("type", "").lower():
+                parent = name if name.endswith("[]") else f"{name}[]"
         if item:
             results.append(item)
     return results
+
+
+def _narrative_response_type(description: str) -> str:
+    normalized = description.lower()
+    if "json object" in normalized:
+        return "Object"
+    if re.search(r"\b(?:as\s+)?a\s+string\b", normalized):
+        return "String"
+    if "array" in normalized:
+        return "Array"
+    return ""
+
+
+def _extract_sections(markdown: Tag) -> tuple[List[Dict[str, str]], List[Dict[str, str]], List[str]]:
+    request_params: List[Dict[str, str]] = []
+    response_params: List[Dict[str, str]] = []
+    response_narratives: List[str] = []
+    constraints: List[str] = []
+    section: Optional[str] = None
+    caption = ""
+    markers = {
+        "request parameters": "request",
+        "request parameters：": "request",
+        "请求参数": "request",
+        "request example": None,
+        "请求示例": None,
+        "response": "response",
+        "response parameters": "response",
+        "返回参数": "response",
+        "response example": None,
+        "返回示例": None,
+    }
+    for node in markdown.find_all(["p", "li", "table"], recursive=True):
+        if node.find_parent("table") is not None:
+            continue
+        if node.name in {"p", "li"}:
+            value = clean_text(node.get_text(" ", strip=True))
+            marker = markers.get(value.lower()) if value.lower() in markers else markers.get(value)
+            if value.lower() in markers or value in markers:
+                section = marker
+                caption = ""
+                continue
+            if section == "request" and value and value.lower() not in {"notes", "note"}:
+                constraints.append(value)
+            if section == "response" and value and value.lower() not in {"notes", "note"}:
+                response_narratives.append(value)
+            caption = value
+            continue
+        if section not in {"request", "response"}:
+            continue
+        rows = extract_table_rows(node, prefix=_table_prefix(caption))
+        if section == "request":
+            request_params.extend(rows)
+        else:
+            response_params.extend(rows)
+        caption = ""
+    if not response_params and response_narratives:
+        description = " ".join(response_narratives)
+        response_params.append(
+            {
+                "name": "$",
+                "type": _narrative_response_type(description),
+                "description": description,
+            }
+        )
+    return request_params, response_params, constraints
+
+
+def _find_code_example(markdown: Tag, *labels: str) -> str:
+    normalized_labels = {clean_text(label).rstrip(":：").lower() for label in labels}
+    for node in markdown.find_all(["p", "h2", "h3", "h4"], recursive=True):
+        value = clean_text(node.get_text(" ", strip=True)).rstrip(":：").lower()
+        if value not in normalized_labels:
+            continue
+        example = node.find_next("pre")
+        if example is not None:
+            return example.get_text("", strip=True)
+    return ""
+
+
+def _request_transport(method: str, request_example: str) -> str:
+    normalized_method = method.upper()
+    if normalized_method == "GET":
+        return "query"
+    if normalized_method in {"POST", "PUT", "PATCH"}:
+        return "body"
+    if normalized_method == "DELETE":
+        normalized_example = request_example.replace("\\", " ")
+        has_data = re.search(
+            r"(?:^|\s)(?:-d|--data(?:-raw)?)(?=\s|['\"{])",
+            normalized_example,
+            flags=re.IGNORECASE,
+        )
+        return "body" if has_data else "query"
+    raise ValueError(f"Unsupported HTTP method in official API document: {method}")
+
+
+def _response_narrative(markdown: Tag) -> str:
+    collecting = False
+    values: List[str] = []
+    start_markers = {"response", "response parameters", "返回参数"}
+    end_markers = {"response example", "返回示例"}
+    for node in markdown.find_all(["p", "li", "table"], recursive=True):
+        if node.find_parent("table") is not None:
+            continue
+        value = clean_text(node.get_text(" ", strip=True))
+        normalized = value.rstrip(":：").lower()
+        if normalized in start_markers:
+            collecting = True
+            continue
+        if normalized in end_markers:
+            break
+        if collecting and node.name in {"p", "li"} and value:
+            values.append(value)
+    return " ".join(values)
+
+
+def _response_container(markdown: Tag, response_params: List[Dict[str, str]]) -> str:
+    narrative = _response_narrative(markdown).lower()
+    if (
+        "single object" in narrative
+        and "array" in narrative
+        or "either a single object or an array" in narrative
+    ):
+        return "conditional_object_or_array"
+
+    response_example = _find_code_example(markdown, "Response example", "返回示例")
+    if response_example:
+        try:
+            value = json.loads(response_example)
+        except json.JSONDecodeError:
+            value = None
+        if isinstance(value, dict):
+            return "object"
+        if isinstance(value, list):
+            return "array"
+        if isinstance(value, str):
+            return "string"
+
+    if len(response_params) == 1 and response_params[0].get("name") == "$":
+        narrative_type = response_params[0].get("type", "").strip().lower()
+        if narrative_type in {"object", "array", "string"}:
+            return narrative_type
+    return "object"
 
 
 def parse_doc(url: str) -> Optional[ParsedDoc]:
@@ -323,51 +372,54 @@ def parse_doc(url: str) -> Optional[ParsedDoc]:
     if article is None or markdown is None:
         return None
 
-    lines = [line for line in article.get_text("\n", strip=True).splitlines() if line.strip()]
-    method = None
-    path = None
-    for idx, line in enumerate(lines):
-        if line in {"GET", "POST", "PUT", "DELETE"} and idx + 1 < len(lines):
-            candidate = lines[idx + 1].strip()
-            if candidate.startswith("/"):
-                method = line
-                path = candidate
-                break
-    if method is None or path is None:
+    article_text = clean_text(article.get_text(" ", strip=True))
+    endpoint = re.search(r"\b(GET|POST|PUT|DELETE)\s+(/(?:api|capi)/[^\s]+)", article_text)
+    if endpoint is None:
         return None
+    method = endpoint.group(1)
+    path = endpoint.group(2).rstrip(".,;，。；")
 
     parsed = urlparse(url)
     path_parts = [part for part in parsed.path.split("/") if part]
     if len(path_parts) < 4 or path_parts[0] != "api-doc":
         return None
-    product = path_parts[1]
-    if product not in {"contract", "spot"}:
+    source_product = path_parts[1]
+    if source_product not in {"contract", "spot", "partner"}:
         return None
-    if "V2" in path_parts or path_parts[1] == "zh-CN":
+    if "V2" in path_parts or "zh-CN" in path_parts:
         return None
+    product = "spot" if source_product == "partner" else source_product
 
     category = get_group(product, path_parts)
     if category is None:
         return None
 
-    title_node = markdown.find("header")
+    title_node = markdown.find("h1") or markdown.find("header")
     title = clean_text(title_node.get_text(" ", strip=True)) if title_node else path_parts[-1]
 
-    override_key = KEY_OVERRIDES.get((product, path_parts[-1]))
-    if override_key:
-        key = override_key
+    if category == "sim":
+        key = DEMO_KEY_MAP.get(path_parts[-1], f"sim.{slugify(path_parts[-1])}")
+    elif (product, path_parts[-1]) in KEY_OVERRIDES:
+        key = KEY_OVERRIDES[(product, path_parts[-1])]
     else:
         key = f"{category}.{slugify(path_parts[-1])}"
         if product == "spot":
             key = f"spot.{key}"
 
-    weight_text = clean_text(markdown.get_text(" ", strip=True))
-    weight_ip, weight_uid = parse_weight(weight_text)
-    requires_auth = "ACCESS-KEY" in clean_text(article.get_text(" ", strip=True))
+    weight_ip, rate_limits = parse_rate_limits(clean_text(markdown.get_text(" ", strip=True)))
+    permission_match = re.search(r"\((USER_DATA|TRADE)\)", title)
+    permission = permission_match.group(1) if permission_match else None
+    requires_auth = permission is not None or category == "rebate"
 
-    wraps = markdown.select(":scope > .api-content-wrap")
-    request_params = extract_table_rows(wraps[0]) if len(wraps) >= 1 else []
-    response_params = extract_table_rows(wraps[1]) if len(wraps) >= 2 else []
+    request_params, response_params, constraints = _extract_sections(markdown)
+    request_transport = _request_transport(
+        method,
+        _find_code_example(markdown, "Request example", "请求示例"),
+    )
+    request_fields = [row["name"] for row in request_params if row.get("name")]
+    query_fields = request_fields if request_transport == "query" else []
+    body_fields = request_fields if request_transport == "body" else []
+    response_container = _response_container(markdown, response_params)
 
     return ParsedDoc(
         product=product,
@@ -379,21 +431,35 @@ def parse_doc(url: str) -> Optional[ParsedDoc]:
         doc_url=url,
         requires_auth=requires_auth,
         weight_ip=weight_ip,
-        weight_uid=weight_uid,
+        rate_limits=rate_limits,
         request_params=request_params,
         response_params=response_params,
+        constraints=constraints,
+        request_transport=request_transport,
+        query_fields=query_fields,
+        body_fields=body_fields,
+        response_container=response_container,
+        permission=permission,
     )
 
 
 def iter_doc_urls(product: str, sitemap_urls: Iterable[str]) -> List[str]:
-    prefix = f"https://www.weex.com/api-doc/{product}/"
     urls = []
     for url in sitemap_urls:
-        if not url.startswith(prefix):
-            continue
         if url in EXCLUDED_DOC_URLS:
             continue
         if "/V2/" in url or "/zh-CN/" in url:
+            continue
+        if product == "spot":
+            included = bool(
+                re.search(r"/api-doc/spot/(?:AccountAPI|ConfigAPI|MarketDataAPI|orderApi|tax)/", url)
+                or re.search(r"/api-doc/partner/rebate-endpoints/", url)
+            )
+        else:
+            included = bool(
+                re.search(r"/api-doc/contract/(?:Account_API|Market_API|Transaction_API|demo)/", url)
+            )
+        if not included:
             continue
         urls.append(url)
     return sorted(set(urls))
@@ -419,147 +485,82 @@ def find_doc(docs: List[ParsedDoc], key: str) -> Optional[ParsedDoc]:
 
 
 def apply_known_overrides(product: str, docs: List[ParsedDoc]) -> None:
+    def has_only_narrative_placeholder(doc: ParsedDoc) -> bool:
+        return (
+            len(doc.response_params) == 1
+            and doc.response_params[0].get("name") == "$"
+        )
+
+    def copy_response(target_key: str, source_key: str) -> None:
+        target = find_doc(docs, target_key)
+        source = find_doc(docs, source_key)
+        if (
+            target is not None
+            and source is not None
+            and (not target.response_params or has_only_narrative_placeholder(target))
+        ):
+            target.response_params = [dict(row) for row in source.response_params]
+
     if product == "spot":
         api_symbols = find_doc(docs, "spot.config.get_api_trading_symbols")
-        if api_symbols is not None and not api_symbols.response_params:
+        if api_symbols is not None and (
+            not api_symbols.response_params or has_only_narrative_placeholder(api_symbols)
+        ):
             api_symbols.response_params = [
                 {
-                    "name": "symbols[]",
+                    "name": "$",
                     "type": "Array<String>",
                     "description": "Raw response is an array of spot symbols available for API trading.",
                 }
             ]
-
-        history_orders = find_doc(docs, "spot.order.history_orders")
-        order_details = find_doc(docs, "spot.order.order_details")
-        if history_orders is not None and order_details is not None and not history_orders.response_params:
-            history_orders.response_params = [dict(row) for row in order_details.response_params]
+        copy_response("spot.order.history_orders", "spot.order.order_details")
 
     if product == "contract":
         api_symbols = find_doc(docs, "market.get_api_trading_symbols")
-        if api_symbols is not None and not api_symbols.response_params:
+        if api_symbols is not None and (
+            not api_symbols.response_params or has_only_narrative_placeholder(api_symbols)
+        ):
             api_symbols.response_params = [
                 {
-                    "name": "symbols[]",
+                    "name": "$",
                     "type": "Array<String>",
                     "description": "Raw response is an array of futures symbols available for API trading.",
                 }
             ]
+        response_references = {
+            "account.get_single_position": "account.get_all_positions",
+            "market.get_history_klines": "market.get_klines",
+            "market.get_index_price_klines": "market.get_klines",
+            "market.get_mark_price_klines": "market.get_klines",
+            "transaction.cancel_orders_batch": "transaction.cancel_order",
+            "transaction.cancel_pending_order": "transaction.cancel_order",
+            "transaction.get_current_order_status": "transaction.get_single_order_info",
+            "transaction.get_order_history": "transaction.get_single_order_info",
+            "transaction.place_orders_batch": "transaction.place_order",
+            "transaction.place_pending_order": "transaction.place_order",
+            "sim.transaction.get_order_history": "transaction.get_single_order_info",
+        }
+        for target_key, source_key in response_references.items():
+            copy_response(target_key, source_key)
 
-        contract_info = find_doc(docs, "market.get_contract_info")
-        if contract_info is not None and len(contract_info.response_params) <= 2:
-            contract_info.response_params = [
-                {
-                    "name": "assets[]",
-                    "type": "Array<Object>",
-                    "description": "Collateral assets list.",
-                },
-                {
-                    "name": "assets[].asset",
-                    "type": "String",
-                    "description": "Collateral asset symbol.",
-                },
-                {
-                    "name": "assets[].marginAvailable",
-                    "type": "Boolean",
-                    "description": "Whether the asset can be used as margin.",
-                },
-                {
-                    "name": "symbols[]",
-                    "type": "Array<Object>",
-                    "description": "Contract symbol configuration list.",
-                },
-                {
-                    "name": "symbols[].symbol",
-                    "type": "String",
-                    "description": "Contract trading pair symbol.",
-                },
-                {
-                    "name": "symbols[].baseAsset",
-                    "type": "String",
-                    "description": "Base asset symbol.",
-                },
-                {
-                    "name": "symbols[].quoteAsset",
-                    "type": "String",
-                    "description": "Quote asset symbol.",
-                },
-                {
-                    "name": "symbols[].marginAsset",
-                    "type": "String",
-                    "description": "Margin asset symbol.",
-                },
-                {
-                    "name": "symbols[].pricePrecision",
-                    "type": "Integer",
-                    "description": "Price precision.",
-                },
-                {
-                    "name": "symbols[].quantityPrecision",
-                    "type": "Integer",
-                    "description": "Quantity precision.",
-                },
-                {
-                    "name": "symbols[].contractVal",
-                    "type": "Number",
-                    "description": "Contract value.",
-                },
-                {
-                    "name": "symbols[].minLeverage",
-                    "type": "Integer",
-                    "description": "Minimum leverage.",
-                },
-                {
-                    "name": "symbols[].maxLeverage",
-                    "type": "Integer",
-                    "description": "Maximum leverage.",
-                },
-                {
-                    "name": "symbols[].buyLimitPriceRatio",
-                    "type": "Number",
-                    "description": "Maximum allowed buy-side limit price deviation ratio.",
-                },
-                {
-                    "name": "symbols[].sellLimitPriceRatio",
-                    "type": "Number",
-                    "description": "Maximum allowed sell-side limit price deviation ratio.",
-                },
-                {
-                    "name": "symbols[].makerFeeRate",
-                    "type": "Number",
-                    "description": "Maker fee rate.",
-                },
-                {
-                    "name": "symbols[].takerFeeRate",
-                    "type": "Number",
-                    "description": "Taker fee rate.",
-                },
-                {
-                    "name": "symbols[].minOrderSize",
-                    "type": "Number",
-                    "description": "Minimum order size.",
-                },
-                {
-                    "name": "symbols[].maxOrderSize",
-                    "type": "Number",
-                    "description": "Maximum order size.",
-                },
-                {
-                    "name": "symbols[].maxPositionSize",
-                    "type": "Number",
-                    "description": "Maximum position size.",
-                },
-                {
-                    "name": "symbols[].marketOpenLimitSize",
-                    "type": "Number",
-                    "description": "Maximum market-open order size.",
-                },
-            ]
+        close_positions = find_doc(docs, "transaction.close_positions")
+        if close_positions is not None and not any(
+            "priority" in item.lower() for item in close_positions.constraints
+        ):
+            close_positions.constraints.append(
+                "When both symbol and positionId are provided, positionId has priority; "
+                "the position must belong to the supplied symbol."
+            )
 
-        order_history = find_doc(docs, "transaction.get_order_history")
-        single_order = find_doc(docs, "transaction.get_single_order_info")
-        if order_history is not None and single_order is not None and not order_history.response_params:
-            order_history.response_params = [dict(row) for row in single_order.response_params]
+        demo_order = find_doc(docs, "sim.transaction.place_order")
+        if demo_order is not None:
+            time_in_force = next(
+                (row for row in demo_order.request_params if row.get("name") == "timeInForce"),
+                None,
+            )
+            if time_in_force is not None and "POST_ONLY" not in time_in_force.get("description", ""):
+                description = time_in_force.get("description", "").rstrip(". ")
+                time_in_force["description"] = f"{description}, POST_ONLY."
 
 
 def docs_to_json(product: str, docs: List[ParsedDoc]) -> Dict[str, Any]:
@@ -574,15 +575,19 @@ def docs_to_json(product: str, docs: List[ParsedDoc]) -> Dict[str, Any]:
             "path": doc.path,
             "doc_url": doc.doc_url,
             "requires_auth": doc.requires_auth,
+            "request_transport": doc.request_transport,
+            "query_fields": doc.query_fields,
+            "body_fields": doc.body_fields,
             "request_params": doc.request_params,
+            "response_container": doc.response_container,
             "response_params": doc.response_params,
+            "rate_limits": doc.rate_limits,
+            "constraints": doc.constraints,
         }
         if doc.permission is not None:
             row["permission"] = doc.permission
         if doc.weight_ip is not None:
             row["weight_ip"] = doc.weight_ip
-        if doc.weight_uid is not None:
-            row["weight_uid"] = doc.weight_uid
         definitions.append(row)
     return {
         "generated_at": generated_at,
@@ -671,13 +676,24 @@ def render_md(product: str, docs: List[ParsedDoc], generated_at: str) -> str:
                 f"- Path: `{doc.path}`",
                 f"- Category: `{doc.category}`",
                 f"- Requires Auth: `{doc.requires_auth}`",
+                f"- Request Transport: `{doc.request_transport}`",
+                f"- Response Container: `{doc.response_container}`",
             ]
         )
         if doc.permission is not None:
             lines.append(f"- Permission: `{doc.permission}`")
-        if doc.weight_ip is not None or doc.weight_uid is not None:
-            lines.append(f"- Weight(IP/UID): `{doc.weight_ip or '-'} / {doc.weight_uid or '-'}`")
+        if doc.weight_ip is not None:
+            lines.append(f"- Weight(IP): `{doc.weight_ip}`")
+        if doc.rate_limits:
+            rendered_limits = ", ".join(
+                f"{item['header']}={item['limit']}" for item in doc.rate_limits
+            )
+            lines.append(f"- Rate Limits: `{rendered_limits}`")
         lines.append(f"- Source: {doc.doc_url}")
+        if doc.constraints:
+            lines.append("- Request Constraints:")
+            for constraint in doc.constraints:
+                lines.append(f"  - {constraint}")
         lines.append("")
         lines.append("### Request Parameters")
         lines.append("")
@@ -740,9 +756,6 @@ def main() -> int:
         urls = iter_doc_urls(product, sitemap_urls)
         docs = collect_docs(product, urls)
         apply_known_overrides(product, docs)
-        if product == "contract":
-            docs.extend(build_contract_demo_docs())
-            docs.sort(key=lambda item: (item.category, item.key))
         write_outputs(product, docs)
         print(f"{product}: generated {len(docs)} endpoints")
     return 0

@@ -31,6 +31,19 @@
     }
   },
   "file_guide": {
+    "scripts/update_openclaw_skills.sh": {
+      "role": "Maintain the official OpenClaw Git checkout at an approved pinned commit, validate integrity and expected skills, atomically refresh fail-closed symlinks, keep a stable updater copy outside the checkout, and run OpenClaw eligibility checks.",
+      "when": [
+        "installing WEEX skills for OpenClaw from the maintained Git checkout",
+        "updating or repairing OpenClaw WEEX skill symlinks",
+        "validating OpenClaw skill eligibility after a Git update"
+      ],
+      "surface": [
+        "WEEX_OPENCLAW_REPO_DIR",
+        "WEEX_OPENCLAW_SKILLS_DIR",
+        "WEEX_OPENCLAW_BIN_LINK"
+      ]
+    },
     "scripts/weex_contract_api.py": {
       "role": "Primary contract/futures REST CLI, including official simulated futures sim.* endpoint routing through explicit trading_mode.",
       "when": [
@@ -292,8 +305,110 @@
         "analyze_account_risk"
       ]
     },
+    "scripts/weex_auto_trade.py": {
+      "role": "Stable saved-profile-only JSON facade for automated strategy registration, authorization lifecycle, guarded submission, recovery, event inspection, and official read-only order reconciliation.",
+      "when": [
+        "registering, listing, or retiring a stable automated strategy identity",
+        "requesting, inspecting, granting, listing, or revoking an automated-trading authorization",
+        "submitting an authorized order through the official runtime and deterministic guard",
+        "resolving uncertain usage or explicitly enabling automatic trading after a safe restore",
+        "inspecting per-order authorization events or refreshing official read-only fill facts"
+      ],
+      "depends_on": [
+        "scripts/weex_auto_trade_state.py",
+        "scripts/weex_auto_trade_runtime.py",
+        "scripts/weex_trade_guard.py",
+        "scripts/weex_profile_store.py"
+      ],
+      "surface": [
+        "register-strategy",
+        "list-strategies",
+        "retire-strategy",
+        "ensure-authorization",
+        "show-authorization-request",
+        "grant-authorization",
+        "list-authorizations",
+        "revoke-authorization",
+        "submit-auto",
+        "resolve-auto-usage",
+        "enable-auto-trading-after-restore",
+        "reconcile-auto-order",
+        "event-list",
+        "snapshot-state",
+        "restore-state",
+        "AutoTradeFacade"
+      ]
+    },
+    "scripts/weex_auto_trade_runtime.py": {
+      "role": "Saved-profile official API boundary for automatic risk inputs, conservative valuation facts, allowlisted order submission, and read-only order/trade reconciliation.",
+      "when": [
+        "following the production collaborators used by submit-auto",
+        "auditing official Spot/Futures request envelopes and result normalization",
+        "refreshing accepted order and fee facts without any trading mutation"
+      ],
+      "depends_on": [
+        "scripts/weex_spot_api.py",
+        "scripts/weex_contract_api.py",
+        "scripts/weex_trade_data_aggregator.py",
+        "scripts/weex_trade_risk_review.py"
+      ],
+      "surface": [
+        "OfficialAutoTradeRuntime",
+        "OfficialApiBoundary",
+        "query_official_order_facts"
+      ]
+    },
+    "scripts/weex_auto_trade_state.py": {
+      "role": "Owner-only six-table SQLite state kernel for stable strategies, complete strategy authorization scope, atomic Decimal quota and order-count usage, order ownership, versioned events, schema v5 migrations, managed snapshots, and restore-safe atomic replacement.",
+      "when": [
+        "following automated authorization state transitions behind the facade",
+        "auditing submission-group and per-leg quota/order ownership",
+        "validating schema, foreign keys, integrity checks, or business invariants",
+        "creating, rotating, or restoring Trader-managed authorization-state snapshots"
+      ],
+      "surface": [
+        "AutoTradeState",
+        "StateConflictError",
+        "prepare_submission_group",
+        "reserve_usage",
+        "settle_usage",
+        "resolve_uncertain_usage",
+        "enable_auto_trading_after_restore",
+        "record_manual_fallback",
+        "record_order",
+        "reconcile_order",
+        "snapshot_state",
+        "restore_state"
+      ]
+    },
+    "scripts/weex_auto_trade_amount.py": {
+      "role": "Deterministic conservative U valuation using fresh official Spot/Futures symbol, depth, fee, leverage, contract-value, and direct/reverse USDT conversion facts.",
+      "when": [
+        "checking automatic order quota before any WEEX write",
+        "diagnosing stale, degraded, insufficient-depth, conversion, leverage, or reduce-only valuation failures"
+      ],
+      "surface": [
+        "estimate_order_amount",
+        "ValuationUnavailable"
+      ]
+    },
+    "scripts/weex_auto_trade_notify.py": {
+      "role": "Credential-free one-shot worker and dispatcher for immediate or window-closed local automated-trading notifications; records delivery/failure once without retrying or changing trade state.",
+      "when": [
+        "delivering claimed ordinary 60-second summaries or immediate exception events",
+        "testing notification adapter failure isolation"
+      ],
+      "depends_on": [
+        "scripts/weex_auto_trade_state.py"
+      ],
+      "surface": [
+        "dispatch_notification_claims",
+        "launch_notification_worker",
+        "run_notification_worker"
+      ]
+    },
     "scripts/weex_trade_guard.py": {
-      "role": "Trade guard that previews order risk, previews TP/SL conditional order risk, scans current account risk, stores environment-bound intents, and gates live or demo order submission.",
+      "role": "Trade guard that previews order risk, previews TP/SL conditional order risk, scans current account risk, stores environment-bound intents, gates live or demo order submission, and enforces automatic scope/quota plus Spot product-quantity and side-specific asset-balance checks before injected official order submission.",
       "when": [
         "previewing a futures or spot order before submission",
         "previewing a simulated futures order before submission",
@@ -302,12 +417,15 @@
         "reviewing current account-level risk without order parameters",
         "requiring explicit confirmation plus --confirm-live before a real order is sent",
         "requiring explicit confirmation plus --confirm-demo before a simulated futures order is sent",
-        "submitting a previously previewed pending order or TP/SL intent"
+        "submitting a previously previewed pending order or TP/SL intent",
+        "submitting an official Spot/Futures automatic order only after deterministic risk, valuation, authorization, and atomic quota checks"
       ],
       "depends_on": [
         "scripts/weex_trade_data_aggregator.py",
         "scripts/weex_order_intent_state.py",
-        "scripts/weex_trade_risk_review.py"
+        "scripts/weex_trade_risk_review.py",
+        "scripts/weex_auto_trade_amount.py",
+        "scripts/weex_auto_trade_state.py"
       ],
       "surface": [
         "preview-order",
@@ -319,7 +437,9 @@
         "cmd_preview_tp_sl",
         "cmd_account_scan",
         "cmd_confirm_order",
-        "cmd_confirm_tp_sl"
+        "cmd_confirm_tp_sl",
+        "resolve_official_auto_trade_operation",
+        "submit_authorized_order"
       ]
     },
     "scripts/weex_profiles_cli.py": {

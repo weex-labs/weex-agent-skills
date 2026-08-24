@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -22,6 +24,7 @@ TRADER_PARTNER_DEFINITIONS = (
 )
 CLI = ROOT / "scripts" / "weex_partner_cli.py"
 TESTS = ROOT / "tests"
+OFFICIAL_DRIFT_CHECK = ROOT / "scripts" / "check_official_partner_contract.py"
 
 EXPECTED_COMMANDS = {
     "list-referral-uids",
@@ -35,6 +38,83 @@ EXPECTED_COMMANDS = {
 
 
 class PartnerDocsConsistencyTests(unittest.TestCase):
+    def test_partner_skill_exposes_independent_official_contract_drift_check(self) -> None:
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        file_index = json.loads(FILE_INDEX.read_text(encoding="utf-8"))
+        skill_text = SKILL.read_text(encoding="utf-8")
+
+        self.assertTrue(OFFICIAL_DRIFT_CHECK.exists())
+        self.assertEqual(
+            manifest["read_order"]["open_if_needed"]["official_contract_drift_check"],
+            "scripts/check_official_partner_contract.py",
+        )
+        self.assertIn(
+            "scripts/check_official_partner_contract.py",
+            file_index["file_guide"],
+        )
+        self.assertIn("check_official_partner_contract.py", skill_text)
+
+    def test_partner_official_drift_parser_extracts_wire_contract_without_trader_generator(self) -> None:
+        self.assertTrue(OFFICIAL_DRIFT_CHECK.exists())
+        spec = importlib.util.spec_from_file_location(
+            "check_official_partner_contract_test",
+            OFFICIAL_DRIFT_CHECK,
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        checker = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = checker
+        spec.loader.exec_module(checker)
+        html = """
+        <article><div class="theme-doc-markdown markdown">
+          <h1>查询子代理数据（代理账户）</h1>
+          <p>POST /api/v3/rebate/affiliate/querySubChannelTransactions</p>
+          <p>请求参数</p>
+          <table>
+            <tr><th>参数名</th><th>类型</th><th>是否必填</th><th>说明</th></tr>
+            <tr><td>productType</td><td>String</td><td>是</td><td>产品类型(SPOT或FUTURES)</td></tr>
+          </table>
+          <p>请求示例</p>
+          <pre>curl -X POST "https://api-spot.weex.com/api/v3/rebate/affiliate/querySubChannelTransactions" -d '{"productType":"SPOT"}'</pre>
+          <p>返回参数</p>
+          <table>
+            <tr><th>字段名</th><th>类型</th><th>字段说明</th></tr>
+            <tr><td>total</td><td>Long</td><td>总记录数</td></tr>
+          </table>
+        </div></article>
+        """
+
+        parsed = checker.parse_official_page(html, language="zh")
+
+        self.assertEqual(parsed["title"], "查询子代理数据（代理账户）")
+        self.assertEqual(parsed["method"], "POST")
+        self.assertEqual(
+            parsed["path"],
+            "/api/v3/rebate/affiliate/querySubChannelTransactions",
+        )
+        self.assertEqual(parsed["request_transport"], "body")
+        self.assertEqual(
+            parsed["request_fields"],
+            [
+                {
+                    "wire_name": "productType",
+                    "type": "String",
+                    "official_required": True,
+                    "official_description": "产品类型(SPOT或FUTURES)",
+                }
+            ],
+        )
+        self.assertEqual(
+            parsed["response_fields"],
+            [
+                {
+                    "wire_name": "total",
+                    "type": "Long",
+                    "official_description": "总记录数",
+                }
+            ],
+        )
+
     def test_internal_withdrawal_status_is_removed_from_partner_contracts(self) -> None:
         skill_text = SKILL.read_text(encoding="utf-8")
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -89,7 +169,7 @@ class PartnerDocsConsistencyTests(unittest.TestCase):
         trader = json.loads(TRADER_PARTNER_DEFINITIONS.read_text(encoding="utf-8"))
 
         self.assertEqual(catalog["schema_version"], 2)
-        self.assertEqual(catalog["last_verified_utc"], "2026-07-28")
+        self.assertEqual(catalog["last_verified_utc"], "2026-07-31")
         self.assertEqual(set(catalog["operations"]), EXPECTED_COMMANDS)
         trader_by_key = {item["key"]: item for item in trader["definitions"]}
 
@@ -254,7 +334,7 @@ class PartnerDocsConsistencyTests(unittest.TestCase):
         ).encode("utf-8")
         self.assertEqual(
             hashlib.sha256(serialized).hexdigest(),
-            "8ddc20ce6cbbfe5cebfbcc49e3f447238dfaeb992e6237a1eb7d1b444d4d57d9",
+            "6a6a1475f9fdf0d2be796d4659fdd928eca5e8473d594566b4c5efda7815d44d",
         )
 
     def test_natural_language_regression_fixture_is_executable_and_read_only(self) -> None:
@@ -577,6 +657,7 @@ class PartnerDocsConsistencyTests(unittest.TestCase):
             "reject_internal_transfer": "`partner_write_unsupported`",
             "reject_uid_contact_match": "`account_identity_check_unsupported`",
             "reject_cross_partner": "`cross_partner_query_unsupported`",
+            "reject_invalid_commission_coin": "`invalid_coin`",
         }
         for fixture_id, outcome in expected_rows.items():
             with self.subTest(fixture_id=fixture_id):
@@ -586,6 +667,25 @@ class PartnerDocsConsistencyTests(unittest.TestCase):
                 )
         self.assertIn("Reuse a profile selected in an earlier turn", text)
         self.assertIn("An all-referrals scope does not imply a complete list", text)
+
+    def test_commission_coin_allowlist_is_explicit_in_skill_policy_and_fixture(self) -> None:
+        for path in (SKILL, QUERY_POLICY):
+            with self.subTest(path=path.name):
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("`get-commission`", text)
+                self.assertIn("`coin`", text)
+                self.assertIn("`USDT` or `BTC`", text)
+                self.assertIn("reject", text.lower())
+
+        payload = json.loads(NATURAL_LANGUAGE_REGRESSION.read_text(encoding="utf-8"))
+        scenario = next(
+            item for item in payload["scenarios"]
+            if item["id"] == "reject_invalid_commission_coin"
+        )
+        self.assertEqual(scenario["expected"]["disposition"], "reject")
+        self.assertEqual(scenario["expected"]["reason"], "invalid_coin")
+        self.assertEqual(scenario["context"]["filters"]["coin"], "ETH")
+        self.assertFalse(scenario["expected"]["partner_rest_request_sent"])
 
     def test_partner_markdown_instructions_are_english_only(self) -> None:
         for path in (SKILL, QUERY_POLICY, OUTPUT_SCHEMA):
@@ -667,13 +767,22 @@ class PartnerDocsConsistencyTests(unittest.TestCase):
 
     def test_five_host_and_openclaw_installation_docs_are_explicit(self) -> None:
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        zh_readme = (REPO_ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
         cursor_rule = (REPO_ROOT / ".cursor" / "rules" / "weex-safety.mdc").read_text(encoding="utf-8")
         installer = (REPO_ROOT / "tools" / "install_local_skills.py").read_text(encoding="utf-8")
 
         for host in ("Codex", "Claude Code", "Cursor", "GitHub Copilot", "OpenClaw"):
             with self.subTest(host=host):
                 self.assertIn(host, readme)
-        self.assertIn("openclaw skills install", readme)
+        for text in (readme, zh_readme):
+            self.assertNotIn("openclaw skills install", text)
+            self.assertNotIn("--as", text)
+            self.assertIn("~/.openclaw/skill-repos/weex-agent-skills", text)
+            self.assertIn("update-weex-openclaw-skills.sh", text)
+            for skill in ("weex-trader-skill", "weex-analysis-skill", "weex-monitor-skill", "weex-partner-skill"):
+                self.assertIn(f"~/.openclaw/skills/{skill}", text)
+        self.assertIn("update_openclaw_skills.sh", installer)
+        self.assertNotIn("native 'openclaw skills install'", installer)
         self.assertIn("weex-partner-skill", cursor_rule)
         self.assertNotIn("use --dir for an Openclaw", installer)
 

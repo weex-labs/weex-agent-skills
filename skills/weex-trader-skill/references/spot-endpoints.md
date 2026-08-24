@@ -6,10 +6,15 @@ Primary local definitions:
 
 Docs roots:
 - https://www.weex.com/api-doc/spot/introduction/APIBriefIntroduction
-- https://www.weex.com/api-doc/spot/log/changelog
+- https://www.weex.com/api-doc/spot/changelog
 
 Base URL:
 - `https://api-spot.weex.com`
+
+Catalog groups include:
+- `spot.account.*`, `spot.config.*`, `spot.market.*`, and `spot.order.*`
+- `spot.tax.*` from the current spot tax pages
+- `spot.rebate.*` from the current Partner rebate pages for documentation drift coverage only; `weex_spot_api.py` excludes this group, and the seven supported read-only queries must use the Partner executor
 
 Quick commands:
 

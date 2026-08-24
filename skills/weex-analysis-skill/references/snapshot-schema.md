@@ -49,6 +49,7 @@ Accepted aliases include:
 - quantity: `quantity`, `qty`, `size`, `position_size`, `positionAmt`
 - entry price: `entry_price`, `entryPrice`, `avgEntryPrice`
 - mark price: `mark_price`, `markPrice`, `current_price`, `last_price`
+- current notional: `notional`, `position_value`, `value`, `mark_value`; normalized trader payloads keep the official opening value separately as `open_value`, which is not a current-notional alias
 - unrealized PnL: `unrealized_pnl`, `unrealizedPnl`, `upl`
 - available balance: `available_balance`, `availableBalance`, `free_collateral`
 

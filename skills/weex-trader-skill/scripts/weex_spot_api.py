@@ -59,6 +59,10 @@ class Endpoint:
     path: str
     requires_auth: bool
     doc_url: str
+    permission: str = ""
+    request_transport: str = "query"
+    query_fields: tuple[str, ...] = ()
+    body_fields: tuple[str, ...] = ()
 
 
 def load_endpoint_map() -> Dict[str, Endpoint]:
@@ -66,6 +70,8 @@ def load_endpoint_map() -> Dict[str, Endpoint]:
     obj = json.loads(refs.read_text(encoding="utf-8"))
     endpoint_map: Dict[str, Endpoint] = {}
     for d in obj.get("definitions", []):
+        if d.get("category") == "rebate":
+            continue
         ep = Endpoint(
             key=d["key"],
             category=d.get("category", ""),
@@ -74,6 +80,10 @@ def load_endpoint_map() -> Dict[str, Endpoint]:
             path=d.get("path", ""),
             requires_auth=bool(d.get("requires_auth", False)),
             doc_url=d.get("doc_url", ""),
+            permission=str(d.get("permission", "")),
+            request_transport=str(d.get("request_transport", "query")),
+            query_fields=tuple(str(value) for value in d.get("query_fields", [])),
+            body_fields=tuple(str(value) for value in d.get("body_fields", [])),
         )
         endpoint_map[ep.key] = ep
     return endpoint_map
@@ -213,6 +223,16 @@ class WeexSpotClient:
         b = body or {}
         if method == "GET" and b:
             raise SystemExit(GET_BODY_UNSUPPORTED_MESSAGE)
+        if endpoint.request_transport == "query" and b:
+            raise SystemExit(
+                f"request_transport_mismatch: {endpoint.key} requires query fields; "
+                "pass them with --query and leave --body empty"
+            )
+        if endpoint.request_transport == "body" and q:
+            raise SystemExit(
+                f"request_transport_mismatch: {endpoint.key} requires a JSON body; "
+                "pass fields with --body and leave --query empty"
+            )
         query_string = parse.urlencode(q, doseq=True)
         body_str = compact_json(b)
 
@@ -292,7 +312,7 @@ def output_json(payload: Dict[str, Any], pretty: bool) -> None:
 
 
 def is_mutating(endpoint: Endpoint) -> bool:
-    return endpoint.method in {"POST", "PUT", "DELETE"} and endpoint.requires_auth
+    return endpoint.requires_auth and endpoint.permission == "TRADE"
 
 
 def private_environment() -> Dict[str, Any]:
@@ -425,6 +445,11 @@ def cmd_list_endpoints(args: argparse.Namespace) -> int:
                 "method": ep.method,
                 "path": ep.path,
                 "requires_auth": ep.requires_auth,
+                "mutating": is_mutating(ep),
+                "permission": ep.permission,
+                "request_transport": ep.request_transport,
+                "query_fields": list(ep.query_fields),
+                "body_fields": list(ep.body_fields),
                 "doc_url": ep.doc_url,
             }
         )

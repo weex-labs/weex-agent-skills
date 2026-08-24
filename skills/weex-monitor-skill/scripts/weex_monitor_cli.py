@@ -305,6 +305,24 @@ def evaluate_pnl_task(task: dict[str, Any], positions: list[dict[str, Any]]) -> 
         }
 
     quantity = normalized["action"].get("quantity") or _position_size(target)
+    position_id, exact_close_error = _exact_close_position_id(target, quantity)
+    if exact_close_error is not None:
+        return {
+            "triggered": False,
+            "reason": exact_close_error,
+            "current_value": str(pnl_value),
+            "threshold": str(threshold),
+            "execution_delegate": "weex-trader-skill",
+        }
+    close_order = {
+        "symbol": normalized["symbol"],
+        "side": _close_order_side(normalized["position_side"]),
+        "position_side": normalized["position_side"],
+        "order_type": "MARKET",
+        "quantity": str(quantity),
+    }
+    if position_id is not None:
+        close_order["position_id"] = position_id
     return {
         "triggered": True,
         "reason": "condition_matched",
@@ -316,13 +334,7 @@ def evaluate_pnl_task(task: dict[str, Any], positions: list[dict[str, Any]]) -> 
             "threshold": normalized["condition"]["threshold"],
             "operator": operator,
         },
-        "close_order": {
-            "symbol": normalized["symbol"],
-            "side": _close_order_side(normalized["position_side"]),
-            "position_side": normalized["position_side"],
-            "order_type": "MARKET",
-            "quantity": str(quantity),
-        },
+        "close_order": close_order,
     }
 
 
@@ -338,11 +350,11 @@ def evaluate_order_baseline_pnl_task(
     if not isinstance(positions, list):
         raise MonitorInputError("positions must be a JSON array")
 
-    target = _find_position(normalized, positions)
-    if target is None:
+    target, binding_error = _resolve_order_baseline_position(normalized, positions)
+    if binding_error is not None or target is None:
         return {
             "triggered": False,
-            "reason": "position_not_found",
+            "reason": binding_error or "position_not_found",
             "execution_delegate": "weex-trader-skill",
         }
 
@@ -375,6 +387,24 @@ def evaluate_order_baseline_pnl_task(
             "execution_delegate": "weex-trader-skill",
         }
 
+    position_id, exact_close_error = _exact_close_position_id(target, baseline["quantity"])
+    if exact_close_error is not None:
+        return {
+            "triggered": False,
+            "reason": exact_close_error,
+            "current_value": str(pnl_value),
+            "threshold": str(threshold),
+            "execution_delegate": "weex-trader-skill",
+        }
+    close_order = {
+        "symbol": normalized["symbol"],
+        "side": _close_order_side(normalized["position_side"]),
+        "position_side": normalized["position_side"],
+        "order_type": "MARKET",
+        "quantity": baseline["quantity"],
+    }
+    if position_id is not None:
+        close_order["position_id"] = position_id
     return {
         "triggered": True,
         "reason": "condition_matched",
@@ -389,13 +419,7 @@ def evaluate_order_baseline_pnl_task(
             "threshold": normalized["condition"]["threshold"],
             "operator": operator,
         },
-        "close_order": {
-            "symbol": normalized["symbol"],
-            "side": _close_order_side(normalized["position_side"]),
-            "position_side": normalized["position_side"],
-            "order_type": "MARKET",
-            "quantity": baseline["quantity"],
-        },
+        "close_order": close_order,
     }
 
 
@@ -1262,7 +1286,8 @@ def run_live_once(
             continue
 
         close_order = dict(recheck_result["close_order"])
-        close_order["new_client_order_id"] = _live_client_order_id(task["task_id"])
+        if close_order.get("position_id") in (None, ""):
+            close_order["new_client_order_id"] = _live_client_order_id(task["task_id"])
         if not claim_task_for_execution(task, now_ms=evaluated_at_ms):
             output = _live_not_executed_output(task, "execution_already_claimed")
             _append_live_event(task["task_id"], "live_execution_skipped", output, evaluated_at_ms)
@@ -1557,9 +1582,16 @@ def _collect_live_position_confirmation(
     blocker = _live_payload_blocker(payload)
     if blocker is not None:
         raise MonitorInputError(f"live position confirmation failed: {blocker}")
-    target = _find_position(task, _positions_from_account_payload(payload))
-    if target is None:
-        raise MonitorInputError("live position confirmation failed: live position not found")
+    positions = _positions_from_account_payload(payload)
+    if task["task_type"] == ORDER_BASELINE_PNL_MONITOR:
+        target, binding_error = _resolve_order_baseline_position(task, positions)
+    else:
+        target = _find_position(task, positions)
+        binding_error = None if target is not None else "position_not_found"
+    if binding_error is not None or target is None:
+        raise MonitorInputError(
+            f"live position confirmation failed: {binding_error or 'position_not_found'}"
+        )
 
     return _position_snapshot_for_task(
         task,
@@ -1584,6 +1616,12 @@ def _position_snapshot_for_task(
         "symbol": task["symbol"],
         "position_side": task["position_side"],
         "quantity": quantity,
+        "position_id": _position_identity(position, "position_id", "positionId", "id"),
+        "separated_open_order_id": _position_identity(
+            position,
+            "separated_open_order_id",
+            "separatedOpenOrderId",
+        ),
         "entry_price": _snapshot_value(_entry_price_for_position(position), language=resolved_language),
         "current_price": _snapshot_value(_current_price_for_position(position, account_payload), language=resolved_language),
         "leverage": _snapshot_value(_first_present(position, ("leverage",)), language=resolved_language),
@@ -1598,7 +1636,13 @@ def _position_snapshot_for_task(
         "liquidation_price": _snapshot_value(
             _first_present(
                 position,
-                ("liquidation_price", "liquidationPrice", "liq_price", "liqPrice"),
+                (
+                    "liquidation_price",
+                    "liquidatePrice",
+                    "liquidationPrice",
+                    "liq_price",
+                    "liqPrice",
+                ),
             ),
             language=resolved_language,
         ),
@@ -1678,16 +1722,16 @@ def _entry_price_for_position(position: dict[str, Any]) -> Any:
     if direct_value is not None:
         return direct_value
 
-    notional_value = _first_present(position, ("openValue", "notional"))
+    open_value = _first_present(position, ("open_value", "openValue"))
     quantity_value = _first_present(position, ("size", "quantity", "qty"))
     try:
-        notional = _decimal_from_any(notional_value, "position.notional")
+        opening_notional = _decimal_from_any(open_value, "position.open_value")
         quantity = _decimal_from_any(quantity_value, "position.quantity")
     except MonitorInputError:
         return None
     if quantity <= 0:
         return None
-    return str(notional / quantity)
+    return str(opening_notional / quantity)
 
 
 def _current_price_for_position(
@@ -1722,7 +1766,10 @@ def _missing_value_label(language: str = "zh") -> str:
 
 
 def _snapshot_value(value: Any, *, language: str = "zh") -> str:
-    text = "" if value is None else str(value).strip()
+    if isinstance(value, float):
+        text = format(value, ".15g")
+    else:
+        text = "" if value is None else str(value).strip()
     if text in {"", "未返回", "not returned"}:
         return _missing_value_label(language)
     return text
@@ -2274,10 +2321,14 @@ def _normalize_condition(value: Any, task_type: str) -> dict[str, str]:
 def _normalize_baseline(value: Any) -> dict[str, str]:
     if not isinstance(value, dict):
         raise MonitorInputError("baseline must be a JSON object")
-    return {
+    baseline = {
         "entry_price": _positive_decimal_text(value.get("entry_price"), "baseline.entry_price"),
         "quantity": _positive_decimal_text(value.get("quantity"), "baseline.quantity"),
     }
+    order_id = value.get("order_id", value.get("orderId"))
+    if order_id not in (None, ""):
+        baseline["order_id"] = str(order_id).strip()
+    return baseline
 
 
 def _normalize_action(
@@ -2611,9 +2662,18 @@ def _baseline_detail_line(
     baseline = task["baseline"]
     current_price = _snapshot_value(position_snapshot.get("current_price"), language=language)
     baseline_pnl = _baseline_pnl_snapshot_value(task, position_snapshot, language=language)
+    order_id = baseline.get("order_id")
+    binding = ""
+    if order_id not in (None, ""):
+        position_id = _snapshot_value(position_snapshot.get("position_id"), language=language)
+        if language == "en":
+            binding = f"source order: {order_id}, bound position ID: {position_id}, "
+        else:
+            binding = f"基准订单: {order_id}, 绑定仓位 ID: {position_id}, "
     if language == "en":
         return (
             "Order baseline: "
+            f"{binding}"
             f"baseline entry price: {baseline['entry_price']}, "
             f"baseline quantity: {baseline['quantity']}, "
             f"current price: {current_price}, "
@@ -2621,6 +2681,7 @@ def _baseline_detail_line(
         )
     return (
         "订单基准: "
+        f"{binding}"
         f"基准开仓价: {baseline['entry_price']}, "
         f"基准数量: {baseline['quantity']}, "
         f"当前价: {current_price}, "
@@ -2768,6 +2829,16 @@ def _baseline_unrealized_pnl(
 
 
 def _find_position(task: dict[str, Any], positions: list[dict[str, Any]]) -> dict[str, Any] | None:
+    matches = _matching_positions(task, positions)
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+    return _aggregate_position_bucket(matches)
+
+
+def _matching_positions(task: dict[str, Any], positions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    matches: list[dict[str, Any]] = []
     for position in positions:
         if not isinstance(position, dict):
             continue
@@ -2780,7 +2851,173 @@ def _find_position(task: dict[str, Any], positions: list[dict[str, Any]]) -> dic
                 continue
         except MonitorInputError:
             continue
-        return position
+        matches.append(position)
+    return matches
+
+
+def _position_identity(position: dict[str, Any], *keys: str) -> str | None:
+    value = _first_present(position, keys)
+    if value in (None, ""):
+        raw = position.get("raw")
+        if isinstance(raw, dict):
+            value = _first_present(raw, keys)
+    return None if value in (None, "") else str(value).strip()
+
+
+def _is_separated_position(position: dict[str, Any]) -> bool:
+    mode = str(
+        _first_present(position, ("position_mode", "positionMode", "separatedMode")) or ""
+    ).strip().upper()
+    return mode == "SEPARATED" or _position_identity(
+        position,
+        "separated_open_order_id",
+        "separatedOpenOrderId",
+    ) is not None
+
+
+def _resolve_order_baseline_position(
+    task: dict[str, Any],
+    positions: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, str | None]:
+    matches = _matching_positions(task, positions)
+    if not matches:
+        return None, "position_not_found"
+    order_id = str(task.get("baseline", {}).get("order_id") or "").strip()
+    separated = [position for position in matches if _is_separated_position(position)]
+    if not order_id:
+        if separated:
+            return None, "separated_position_order_id_required"
+        return (matches[0] if len(matches) == 1 else _aggregate_position_bucket(matches)), None
+
+    bound = [
+        position
+        for position in matches
+        if _position_identity(
+            position,
+            "separated_open_order_id",
+            "separatedOpenOrderId",
+        )
+        == order_id
+    ]
+    if not bound:
+        return None, "separated_position_not_found"
+    if len(bound) != 1:
+        return None, "separated_position_ambiguous"
+    return bound[0], None
+
+
+def _exact_close_position_id(
+    position: dict[str, Any],
+    quantity: Any,
+) -> tuple[str | None, str | None]:
+    members = position.get("members")
+    member_rows = (
+        [item for item in members if isinstance(item, dict)]
+        if isinstance(members, list)
+        else [position]
+    )
+    separated = [item for item in member_rows if _is_separated_position(item)]
+    if not separated:
+        return None, None
+    if len(member_rows) != 1 or len(separated) != 1:
+        return None, "separated_position_ambiguous"
+    target = separated[0]
+    position_id = _position_identity(target, "position_id", "positionId", "id")
+    if position_id is None:
+        return None, "separated_position_id_missing"
+    if _decimal_from_any(_position_size(target), "position.size") != _decimal_from_any(
+        quantity,
+        "close.quantity",
+    ):
+        return None, "separated_position_quantity_mismatch"
+    return position_id, None
+
+
+def _aggregate_position_bucket(positions: list[dict[str, Any]]) -> dict[str, Any]:
+    quantities = [_decimal_from_any(_position_size(position), "position.size") for position in positions]
+    total_quantity = sum(quantities, Decimal("0"))
+    aggregate: dict[str, Any] = {
+        "symbol": str(_first_present(positions[0], ("symbol", "contract", "instId")) or "").upper(),
+        "side": str(
+            _first_present(positions[0], ("side", "positionSide", "position_side", "holdSide")) or ""
+        ).upper(),
+        "quantity": str(total_quantity),
+        "members": sorted(
+            (dict(position) for position in positions),
+            key=lambda position: (
+                _position_identity(position, "position_id", "positionId", "id") or "",
+                json.dumps(position, ensure_ascii=False, sort_keys=True, default=str),
+            ),
+        ),
+    }
+
+    _set_aggregate_sum(
+        aggregate,
+        "unrealized_pnl",
+        positions,
+        ("unrealizePnl", "unrealizedPnl", "unrealized_pnl"),
+    )
+    _set_aggregate_sum(
+        aggregate,
+        "available_quantity",
+        positions,
+        ("available_quantity", "availableQuantity", "availableQty", "availQty", "available"),
+    )
+    _set_aggregate_sum(aggregate, "open_value", positions, ("open_value", "openValue"))
+    _set_aggregate_sum(aggregate, "notional", positions, ("notional", "positionValue"))
+
+    entry_prices = [_entry_price_for_position(position) for position in positions]
+    if all(value is not None and str(value).strip() != "" for value in entry_prices):
+        weighted_total = sum(
+            (
+                _decimal_from_any(value, "position.entry_price") * quantity
+                for value, quantity in zip(entry_prices, quantities)
+            ),
+            Decimal("0"),
+        )
+        aggregate["entry_price"] = str(weighted_total / total_quantity)
+
+    for output_key, aliases in (
+        ("mark_price", ("mark_price", "markPrice", "last_price", "lastPrice", "current_price", "price")),
+        ("leverage", ("leverage",)),
+        ("margin_type", ("margin_type", "marginType")),
+        ("position_mode", ("position_mode", "positionMode", "separatedMode")),
+        ("liquidation_price", ("liquidation_price", "liquidatePrice", "liquidationPrice", "liq_price", "liqPrice")),
+    ):
+        common_value = _common_position_value(positions, aliases)
+        if common_value is not None:
+            aggregate[output_key] = common_value
+
+    updated_times = [
+        _first_present(position, ("updated_time", "updatedTime", "updateTime", "updated_at_ms"))
+        for position in positions
+    ]
+    if all(value is not None and str(value).strip() != "" for value in updated_times):
+        aggregate["updated_time"] = max(updated_times, key=lambda value: str(value))
+    return aggregate
+
+
+def _set_aggregate_sum(
+    aggregate: dict[str, Any],
+    output_key: str,
+    positions: list[dict[str, Any]],
+    aliases: tuple[str, ...],
+) -> None:
+    values = [_first_present(position, aliases) for position in positions]
+    if not all(value is not None and str(value).strip() != "" for value in values):
+        return
+    aggregate[output_key] = str(
+        sum((_decimal_from_any(value, output_key) for value in values), Decimal("0"))
+    )
+
+
+def _common_position_value(positions: list[dict[str, Any]], aliases: tuple[str, ...]) -> Any:
+    values = [_first_present(position, aliases) for position in positions]
+    if not all(value is not None and str(value).strip() != "" for value in values):
+        return None
+    first = str(values[0]).strip()
+    if all(str(value).strip() == first for value in values[1:]):
+        return values[0]
     return None
 
 

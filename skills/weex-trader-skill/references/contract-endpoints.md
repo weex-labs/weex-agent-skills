@@ -5,17 +5,17 @@ Primary local definitions (inside this skill):
 - `references/contract-api-definitions.md`
 
 Docs root:
-- https://www.weex.com/api-doc/contract/log/changelog
+- https://www.weex.com/api-doc/contract/changelog
 
 Key transaction endpoint:
 - `POST /capi/v3/order`
 - https://www.weex.com/api-doc/contract/Transaction_API/PlaceOrder
 
-Other commonly used groups:
-- Market: `/capi/v3/market/*`
-- Account: `/capi/v3/account/*`
-- Transaction: `/capi/v3/*`
-- Simulated futures trading: `sim.*` entries in `references/contract-api-definitions.json`
+Catalog groups use endpoint-key prefixes, not a promise that every URL shares one path prefix:
+- Market: `market.*`; for example, `GET /capi/v3/market/ticker/24hr`
+- Account: `account.*`; for example, `GET /capi/v3/account/balance`
+- Transaction: `transaction.*`; for example, `POST /capi/v3/order`
+- Simulated futures trading: `sim.*`; for example, `POST /capi/v3/sim/order`
 
 List only the 4 official simulated futures endpoints:
 

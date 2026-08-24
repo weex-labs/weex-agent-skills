@@ -1,6 +1,6 @@
 # WEEX Spot API Definitions
 
-Generated from live V3 docs on 2026-04-17.
+Generated from live V3 docs on 2026-07-31.
 
 ## Contents
 
@@ -10,16 +10,17 @@ Generated from live V3 docs on 2026-04-17.
 - `spot.market.*` endpoint sections
 - `spot.order.*` endpoint sections
 - `spot.rebate.*` endpoint sections
+- `spot.tax.*` endpoint sections
 
 Use in-page search with the exact endpoint key from the summary table to jump to a specific generated section quickly.
 
 ## Summary Table
 
-Total endpoints: **32**
+Total endpoints: **33**
 
 | Key | Method | Path | Auth |
 |---|---|---|---|
-| `spot.account.get_account_balance` | `GET` | `/api/v3/account/` | `True` |
+| `spot.account.get_account_balance` | `GET` | `/api/v3/account` | `True` |
 | `spot.account.get_bill_records` | `POST` | `/api/v3/account/bills` | `True` |
 | `spot.account.get_fund_bill_records` | `POST` | `/api/v3/account/fundingBills` | `True` |
 | `spot.account.transfer_records` | `GET` | `/api/v3/account/transferRecords` | `True` |
@@ -51,17 +52,23 @@ Total endpoints: **32**
 | `spot.rebate.internal_withdrawal` | `POST` | `/api/v3/rebate/affiliate/internalWithdrawal` | `True` |
 | `spot.rebate.query_sub_channel_transactions` | `POST` | `/api/v3/rebate/affiliate/querySubChannelTransactions` | `True` |
 | `spot.rebate.verify_referrals` | `GET` | `/api/v3/agency/verifyReferrals` | `True` |
+| `spot.tax.get_spot_account_record` | `POST` | `/api/v3/tax/income` | `True` |
 
 ## Spot Account Endpoint Sections
 
 ## spot.account.get_account_balance — Get Account Information (USER_DATA)
 
 - Method: `GET`
-- Path: `/api/v3/account/`
+- Path: `/api/v3/account`
 - Category: `account`
 - Requires Auth: `True`
-- Weight(IP/UID): `5 / 5`
+- Request Transport: `query`
+- Response Container: `object`
+- Permission: `USER_DATA`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/AccountAPI/GetAccountBalance
+- Request Constraints:
+  - NONE
 
 ### Request Parameters
 
@@ -84,9 +91,9 @@ NONE
 | `updateTime` | `Long` | Last account update time (ms). |
 | `accountType` | `String` | Account type, e.g. SPOT . |
 | `balances` | `Array<Object>` | Asset balances. |
-| `-> asset` | `String` | Asset symbol. |
-| `-> free` | `String` | Free balance. |
-| `-> locked` | `String` | Locked balance. |
+| `balances[].asset` | `String` | Asset symbol. |
+| `balances[].free` | `String` | Free balance. |
+| `balances[].locked` | `String` | Locked balance. |
 | `permissions` | `Array<String>` | Granted permissions (e.g. SPOT_TRADING ). |
 | `uid` | `Long` | Account UID. |
 | `symbolCommissions` | `Object` | Per-symbol maker/taker commission overrides. |
@@ -97,7 +104,10 @@ NONE
 - Path: `/api/v3/account/bills`
 - Category: `account`
 - Requires Auth: `True`
-- Weight(IP/UID): `5 / 5`
+- Request Transport: `body`
+- Response Container: `array`
+- Permission: `USER_DATA`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/AccountAPI/GetBillRecords
 
 ### Request Parameters
@@ -131,7 +141,10 @@ NONE
 - Path: `/api/v3/account/fundingBills`
 - Category: `account`
 - Requires Auth: `True`
-- Weight(IP/UID): `5 / 5`
+- Request Transport: `body`
+- Response Container: `object`
+- Permission: `USER_DATA`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/AccountAPI/GetFundBillRecords
 
 ### Request Parameters
@@ -162,7 +175,10 @@ NONE
 - Path: `/api/v3/account/transferRecords`
 - Category: `account`
 - Requires Auth: `True`
-- Weight(IP/UID): `3 / 3`
+- Request Transport: `query`
+- Response Container: `array`
+- Permission: `USER_DATA`
+- Weight(IP): `3`
 - Source: https://www.weex.com/api-doc/spot/AccountAPI/TransferRecords
 
 ### Request Parameters
@@ -196,8 +212,12 @@ NONE
 - Path: `/api/v3/coins`
 - Category: `config`
 - Requires Auth: `False`
-- Weight(IP/UID): `5 / -`
+- Request Transport: `query`
+- Response Container: `array`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/ConfigAPI/CurrencyInfo
+- Request Constraints:
+  - NONE
 
 ### Request Parameters
 
@@ -212,19 +232,19 @@ NONE
 | `depositAllEnable` | `Boolean` | Whether deposits are enabled. |
 | `withdrawAllEnable` | `Boolean` | Whether withdrawals are enabled. |
 | `networkList` | `Array<Object>` | Supported network information. |
-| `-> network` | `String` | Network name (e.g. ERC20 ). |
-| `-> isDefault` | `Boolean` | Whether this is the default network. |
-| `-> depositEnable` | `Boolean` | Whether deposits via this network are enabled. |
-| `-> withdrawEnable` | `Boolean` | Whether withdrawals via this network are enabled. |
-| `-> withdrawFee` | `String` | Withdrawal fee. |
-| `-> withdrawMin` | `String` | Minimum withdrawal amount. |
-| `-> withdrawIntegerMultiple` | `BigDecimal` | Required multiple for withdrawals. |
-| `-> minConfirm` | `Integer` | Minimum confirmations required for deposits. |
-| `-> withdrawTag` | `Boolean` | Whether a tag/memo is required. |
-| `-> depositDust` | `String` | Minimum deposit amount that will be credited. |
-| `-> contractAddress` | `String` | Contract address (if applicable). |
-| `-> contractAddressUrl` | `String` | Explorer URL for the contract. |
-| `-> depositDesc / withdrawDesc` | `String` | Optional status messages when deposits/withdrawals are disabled. |
+| `networkList[].network` | `String` | Network name (e.g. ERC20 ). |
+| `networkList[].isDefault` | `Boolean` | Whether this is the default network. |
+| `networkList[].depositEnable` | `Boolean` | Whether deposits via this network are enabled. |
+| `networkList[].withdrawEnable` | `Boolean` | Whether withdrawals via this network are enabled. |
+| `networkList[].withdrawFee` | `String` | Withdrawal fee. |
+| `networkList[].withdrawMin` | `String` | Minimum withdrawal amount. |
+| `networkList[].withdrawIntegerMultiple` | `BigDecimal` | Required multiple for withdrawals. |
+| `networkList[].minConfirm` | `Integer` | Minimum confirmations required for deposits. |
+| `networkList[].withdrawTag` | `Boolean` | Whether a tag/memo is required. |
+| `networkList[].depositDust` | `String` | Minimum deposit amount that will be credited. |
+| `networkList[].contractAddress` | `String` | Contract address (if applicable). |
+| `networkList[].contractAddressUrl` | `String` | Explorer URL for the contract. |
+| `networkList[].depositDesc / withdrawDesc` | `String` | Optional status messages when deposits/withdrawals are disabled. |
 
 ## spot.config.get_api_trading_symbols — Get Spot API Trading Symbols
 
@@ -232,8 +252,12 @@ NONE
 - Path: `/api/v3/apiTradingSymbols`
 - Category: `config`
 - Requires Auth: `False`
-- Weight(IP/UID): `5 / -`
+- Request Transport: `query`
+- Response Container: `array`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/ConfigAPI/GetAllProductInfo
+- Request Constraints:
+  - No parameters.
 
 ### Request Parameters
 
@@ -243,7 +267,7 @@ NONE
 
 | Name | Type | Description |
 |---|---|---|
-| `symbols[]` | `Array<String>` | Raw response is an array of spot symbols available for API trading. |
+| `$` | `Array<String>` | Raw response is an array of spot symbols available for API trading. |
 
 ## spot.config.get_product_info — Exchange information
 
@@ -251,7 +275,9 @@ NONE
 - Path: `/api/v3/exchangeInfo`
 - Category: `config`
 - Requires Auth: `False`
-- Weight(IP/UID): `20 / -`
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `20`
 - Source: https://www.weex.com/api-doc/spot/ConfigAPI/GetProductInfo
 
 ### Request Parameters
@@ -260,7 +286,7 @@ NONE
 |---|---|---|---|
 | `symbol` | `String` | `No` | Single trading pair. Mutually exclusive with symbols . |
 | `symbols` | `Array` | `No` | Multiple trading pairs. Accepts comma-separated values or a JSON array. |
-| `symbolStatus` | `String` | `No` | Filter by symbol status. Currently only TRADING is supported. |
+| `symbolStatus` | `String` | `No` | Filter by symbol status. Values: TRADING (normal trading), HALT (trading suspended), BREAK (market closed). |
 
 ### Response Parameters
 
@@ -268,29 +294,34 @@ NONE
 |---|---|---|
 | `timezone` | `String` | Exchange timezone (e.g. UTC ). |
 | `serverTime` | `Long` | Current server time in milliseconds. |
+| `rateLimits` | `Array<Object>` | API access rate limits. |
+| `rateLimits[].interval` | `String` | Rate-limit interval unit, e.g. MINUTE . |
+| `rateLimits[].intervalNum` | `Integer` | Number of interval units, e.g. 1 . |
+| `rateLimits[].limit` | `Integer` | Maximum allowed count within the interval. |
+| `rateLimits[].rateLimitType` | `String` | Rate-limit type, e.g. REQUEST_WEIGHT or ORDERS . |
 | `symbols` | `Array<Object>` | Trading pair definitions. |
-| `-> symbol` | `String` | Trading pair code, e.g. BTCUSDT . |
-| `-> status` | `String` | Trading status, e.g. TRADING . |
-| `-> baseAsset` | `String` | Base asset symbol. |
-| `-> baseAssetPrecision` | `Integer` | Base asset precision. |
-| `-> quoteAsset` | `String` | Quote asset symbol. |
-| `-> quoteAssetPrecision` | `Integer` | Quote asset precision. |
-| `-> tickSize` | `String` | Minimum price increment (for quoteCoin) |
-| `-> stepSize` | `String` | Minimum quantity increment (for baseCoin) |
-| `-> minTradeAmount` | `BigDecimal` | Minimum order quantity. |
-| `-> maxTradeAmount` | `BigDecimal` | Maximum order quantity. |
-| `-> takerFeeRate` | `BigDecimal` | Taker fee rate. |
-| `-> makerFeeRate` | `BigDecimal` | Maker fee rate. |
-| `-> buyLimitPriceRatio` | `BigDecimal` | Maximum allowed deviation for buy limit orders. |
-| `-> sellLimitPriceRatio` | `BigDecimal` | Maximum allowed deviation for sell limit orders. |
-| `-> marketBuyLimitSize` | `BigDecimal` | Per-order size limit for market buys. |
-| `-> marketSellLimitSize` | `BigDecimal` | Per-order size limit for market sells. |
-| `-> marketFallbackPriceRatio` | `BigDecimal` | Fallback price ratio for market orders. |
-| `-> enableTrade` | `Boolean` | Whether trading is enabled. |
-| `-> enableDisplay` | `Boolean` | Whether the symbol is displayed. |
-| `-> displayDigitMerge` | `String` | Depth merge configuration. |
-| `-> displayNew` | `Boolean` | Whether the symbol is marked as ânewâ. |
-| `-> displayHot` | `Boolean` | Whether the symbol is marked as âhotâ. |
+| `symbols[].symbol` | `String` | Trading pair code, e.g. BTCUSDT . |
+| `symbols[].status` | `String` | Trading status. Values: TRADING (normal trading), HALT (trading suspended), BREAK (market closed). |
+| `symbols[].baseAsset` | `String` | Base asset symbol. |
+| `symbols[].baseAssetPrecision` | `Integer` | Base asset precision. |
+| `symbols[].quoteAsset` | `String` | Quote asset symbol. |
+| `symbols[].quoteAssetPrecision` | `Integer` | Quote asset precision. |
+| `symbols[].tickSize` | `String` | Minimum price increment (for quoteCoin) |
+| `symbols[].stepSize` | `String` | Minimum quantity increment (for baseCoin) |
+| `symbols[].minTradeAmount` | `BigDecimal` | Minimum order quantity. |
+| `symbols[].maxTradeAmount` | `BigDecimal` | Maximum order quantity. |
+| `symbols[].takerFeeRate` | `BigDecimal` | Taker fee rate. |
+| `symbols[].makerFeeRate` | `BigDecimal` | Maker fee rate. |
+| `symbols[].buyLimitPriceRatio` | `BigDecimal` | Maximum allowed deviation for buy limit orders. |
+| `symbols[].sellLimitPriceRatio` | `BigDecimal` | Maximum allowed deviation for sell limit orders. |
+| `symbols[].marketBuyLimitSize` | `BigDecimal` | Per-order size limit for market buys. |
+| `symbols[].marketSellLimitSize` | `BigDecimal` | Per-order size limit for market sells. |
+| `symbols[].marketFallbackPriceRatio` | `BigDecimal` | Fallback price ratio for market orders. |
+| `symbols[].enableTrade` | `Boolean` | Whether trading is enabled. |
+| `symbols[].enableDisplay` | `Boolean` | Whether the symbol is displayed. |
+| `symbols[].displayDigitMerge` | `String` | Depth merge configuration. |
+| `symbols[].displayNew` | `Boolean` | Whether the symbol is marked as “new”. |
+| `symbols[].displayHot` | `Boolean` | Whether the symbol is marked as “hot”. |
 
 ## spot.config.get_server_time — Get Server Time
 
@@ -298,8 +329,12 @@ NONE
 - Path: `/api/v3/time`
 - Category: `config`
 - Requires Auth: `False`
-- Weight(IP/UID): `1 / -`
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `1`
 - Source: https://www.weex.com/api-doc/spot/ConfigAPI/GetServerTime
+- Request Constraints:
+  - NONE
 
 ### Request Parameters
 
@@ -317,8 +352,12 @@ NONE
 - Path: `/api/v3/ping`
 - Category: `config`
 - Requires Auth: `False`
-- Weight(IP/UID): `1 / -`
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `1`
 - Source: https://www.weex.com/api-doc/spot/ConfigAPI/Ping
+- Request Constraints:
+  - NONE
 
 ### Request Parameters
 
@@ -326,7 +365,9 @@ NONE
 
 ### Response Parameters
 
-NONE
+| Name | Type | Description |
+|---|---|---|
+| `$` | `Object` | Returns an empty JSON object on success. |
 
 ## Spot Market Endpoint Sections
 
@@ -336,7 +377,9 @@ NONE
 - Path: `/api/v3/market/ticker/24hr`
 - Category: `market`
 - Requires Auth: `False`
-- Weight(IP/UID): `2 / -`
+- Request Transport: `query`
+- Response Container: `conditional_object_or_array`
+- Weight(IP): `2`
 - Source: https://www.weex.com/api-doc/spot/MarketDataAPI/GetAllTickerInfo
 
 ### Request Parameters
@@ -373,7 +416,9 @@ NONE
 - Path: `/api/v3/market/ticker/bookTicker`
 - Category: `market`
 - Requires Auth: `False`
-- Weight(IP/UID): `4 / -`
+- Request Transport: `query`
+- Response Container: `conditional_object_or_array`
+- Weight(IP): `4`
 - Source: https://www.weex.com/api-doc/spot/MarketDataAPI/GetBookTicker
 
 ### Request Parameters
@@ -399,7 +444,9 @@ NONE
 - Path: `/api/v3/market/depth`
 - Category: `market`
 - Requires Auth: `False`
-- Weight(IP/UID): `5 / -`
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/MarketDataAPI/GetDepthData
 
 ### Request Parameters
@@ -423,7 +470,9 @@ NONE
 - Path: `/api/v3/market/klines`
 - Category: `market`
 - Requires Auth: `False`
-- Weight(IP/UID): `2 / -`
+- Request Transport: `query`
+- Response Container: `array`
+- Weight(IP): `2`
 - Source: https://www.weex.com/api-doc/spot/MarketDataAPI/GetKLineData
 
 ### Request Parameters
@@ -431,23 +480,23 @@ NONE
 | Name | Type | Required | Description |
 |---|---|---|---|
 | `symbol` | `String` | `Yes` | Trading pair, e.g. BTCUSDT . |
-| `interval` | `String` | `Yes` | Candlestick interval (e.g. [1m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,1w,1M]). |
+| `interval` | `String` | `Yes` | Candlestick interval (e.g. [1m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,1w]). |
 
 ### Response Parameters
 
 | Name | Type | Description |
 |---|---|---|
-| `` | `` | Open time (ms). |
-| `` | `` | Open price. |
-| `` | `` | High price. |
-| `` | `` | Low price. |
-| `` | `` | Close price. |
-| `` | `` | Volume (base asset). |
-| `` | `` | Close time (ms). |
-| `` | `` | Quote asset volume. |
-| `` | `` | Number of trades. |
-| `` | `` | Taker buy volume (base asset). |
-| `` | `` | Taker buy volume (quote asset). |
+| `0` | `` | Open time (ms). |
+| `1` | `` | Open price. |
+| `2` | `` | High price. |
+| `3` | `` | Low price. |
+| `4` | `` | Close price. |
+| `5` | `` | Volume (base asset). |
+| `6` | `` | Close time (ms). |
+| `7` | `` | Quote asset volume. |
+| `8` | `` | Number of trades. |
+| `9` | `` | Taker buy volume (base asset). |
+| `10` | `` | Taker buy volume (quote asset). |
 
 ## spot.market.get_ticker_info — Get Latest Price
 
@@ -455,7 +504,9 @@ NONE
 - Path: `/api/v3/market/ticker/price`
 - Category: `market`
 - Requires Auth: `False`
-- Weight(IP/UID): `4 / -`
+- Request Transport: `query`
+- Response Container: `conditional_object_or_array`
+- Weight(IP): `4`
 - Source: https://www.weex.com/api-doc/spot/MarketDataAPI/GetTickerInfo
 
 ### Request Parameters
@@ -478,7 +529,9 @@ NONE
 - Path: `/api/v3/market/trades`
 - Category: `market`
 - Requires Auth: `False`
-- Weight(IP/UID): `25 / -`
+- Request Transport: `query`
+- Response Container: `array`
+- Weight(IP): `25`
 - Source: https://www.weex.com/api-doc/spot/MarketDataAPI/GetTradeData
 
 ### Request Parameters
@@ -486,7 +539,7 @@ NONE
 | Name | Type | Required | Description |
 |---|---|---|---|
 | `symbol` | `String` | `Yes` | Trading pair, e.g. BTCUSDT . |
-| `limit` | `Integer` | `No` | Number of trades to return. Range 1 â 1000 , default 100 . |
+| `limit` | `Integer` | `No` | Number of trades to return. Range 1 – 1000 , default 100 . |
 
 ### Response Parameters
 
@@ -508,7 +561,10 @@ NONE
 - Path: `/api/v3/order/batch`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `5 / 10`
+- Request Transport: `body`
+- Response Container: `object`
+- Permission: `TRADE`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/orderApi/BulkCancel
 
 ### Request Parameters
@@ -523,9 +579,9 @@ NONE
 | Name | Type | Description |
 |---|---|---|
 | `orderList` | `Array<Object>` | Per-order cancel result. |
-| `-> orderId` | `Long` | Cancelled order ID (if found). |
-| `-> status` | `String` | Final status, e.g. CANCELED . |
-| `-> errorMsg` | `String` | Error message when cancellation failed. |
+| `orderList[].orderId` | `Long` | Cancelled order ID (if found). |
+| `orderList[].status` | `String` | Final status, e.g. CANCELED . |
+| `orderList[].errorMsg` | `String` | Error message when cancellation failed. |
 
 ## spot.order.bulk_order — Batch Place Orders (TRADE)
 
@@ -533,8 +589,13 @@ NONE
 - Path: `/api/v3/order/batch`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `10 / 50`
+- Request Transport: `body`
+- Response Container: `object`
+- Permission: `TRADE`
+- Rate Limits: `X-ORDER-COUNT-10S=5, X-ORDER-COUNT-1M=5, X-USED-WEIGHT-1M=0`
 - Source: https://www.weex.com/api-doc/spot/orderApi/BulkOrder
+- Request Constraints:
+  - Each element of orderList supports the following fields:
 
 ### Request Parameters
 
@@ -542,18 +603,24 @@ NONE
 |---|---|---|---|
 | `symbol` | `String` | `Yes` | Trading pair, e.g. BTCUSDT . |
 | `orderList` | `Array<Object>` | `Yes` | Up to 10 order definitions. |
+| `orderList[].side` | `String` | `Yes` | BUY or SELL . |
+| `orderList[].type` | `String` | `Yes` | LIMIT or MARKET . |
+| `orderList[].timeInForce` | `String` | `Conditional` | Required when type = LIMIT . Values: GTC , IOC , FOK . |
+| `orderList[].quantity` | `String` | `Yes` | Order quantity. |
+| `orderList[].price` | `String` | `Conditional` | Limit price when type = LIMIT . |
+| `orderList[].newClientOrderId` | `String` | `No` | Client-defined order ID. |
 
 ### Response Parameters
 
 | Name | Type | Description |
 |---|---|---|
 | `orderList` | `Array<Object>` | Per-order result list. |
-| `-> symbol` | `String` | Trading pair. |
-| `-> orderId` | `Long` | Created order ID (present when successful). |
-| `-> clientOrderId` | `String` | Client-defined order ID. |
-| `-> transactTime` | `Long` | Order acceptance time (ms). |
-| `-> errorCode` | `String` | Error code when the order failed. |
-| `-> errorMsg` | `String` | Error message when the order failed. |
+| `orderList[].symbol` | `String` | Trading pair. |
+| `orderList[].orderId` | `Long` | Created order ID (present when successful). |
+| `orderList[].clientOrderId` | `String` | Client-defined order ID. |
+| `orderList[].transactTime` | `Long` | Order acceptance time (ms). |
+| `orderList[].errorCode` | `String` | Error code when the order failed. |
+| `orderList[].errorMsg` | `String` | Error message when the order failed. |
 
 ## spot.order.cancel_order — Cancel Order (TRADE)
 
@@ -561,7 +628,10 @@ NONE
 - Path: `/api/v3/order`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `1 / 1`
+- Request Transport: `query`
+- Response Container: `object`
+- Permission: `TRADE`
+- Weight(IP): `1`
 - Source: https://www.weex.com/api-doc/spot/orderApi/CancelOrder
 
 ### Request Parameters
@@ -584,7 +654,10 @@ NONE
 - Path: `/api/v3/openOrders`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `1 / 1`
+- Request Transport: `query`
+- Response Container: `array`
+- Permission: `TRADE`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/orderApi/Cancel-Symbol-Orders
 
 ### Request Parameters
@@ -606,7 +679,10 @@ NONE
 - Path: `/api/v3/allOrders`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `10 / 10`
+- Request Transport: `query`
+- Response Container: `array`
+- Permission: `USER_DATA`
+- Weight(IP): `10`
 - Source: https://www.weex.com/api-doc/spot/orderApi/HistoryOrders
 
 ### Request Parameters
@@ -644,7 +720,10 @@ NONE
 - Path: `/api/v3/order`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `2 / 2`
+- Request Transport: `query`
+- Response Container: `object`
+- Permission: `USER_DATA`
+- Weight(IP): `2`
 - Source: https://www.weex.com/api-doc/spot/orderApi/OrderDetails
 
 ### Request Parameters
@@ -679,7 +758,10 @@ NONE
 - Path: `/api/v3/order`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `2 / 5`
+- Request Transport: `body`
+- Response Container: `object`
+- Permission: `TRADE`
+- Rate Limits: `X-ORDER-COUNT-10S=1, X-ORDER-COUNT-1M=1, X-USED-WEIGHT-1M=0`
 - Source: https://www.weex.com/api-doc/spot/orderApi/PlaceOrder
 
 ### Request Parameters
@@ -709,7 +791,10 @@ NONE
 - Path: `/api/v3/myTrades`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `5 / 5`
+- Request Transport: `query`
+- Response Container: `array`
+- Permission: `USER_DATA`
+- Weight(IP): `5`
 - Source: https://www.weex.com/api-doc/spot/orderApi/TransactionDetails
 
 ### Request Parameters
@@ -719,7 +804,7 @@ NONE
 | `symbol` | `String` | `Yes` | Trading pair. |
 | `orderId` | `Long` | `No` | Filter by order ID. |
 | `startTime` | `Long` | `No` | Start time (ms). |
-| `endTime` | `Long` | `No` | End time (ms). Must be â¥ startTime . |
+| `endTime` | `Long` | `No` | End time (ms). Must be ≥ startTime . |
 | `limit` | `Integer` | `No` | Page size (default 100). |
 
 ### Response Parameters
@@ -742,7 +827,10 @@ NONE
 - Path: `/api/v3/openOrders`
 - Category: `order`
 - Requires Auth: `True`
-- Weight(IP/UID): `3 / 3`
+- Request Transport: `query`
+- Response Container: `array`
+- Permission: `USER_DATA`
+- Weight(IP): `3`
 - Source: https://www.weex.com/api-doc/spot/orderApi/UnfinishedOrders
 
 ### Request Parameters
@@ -778,8 +866,10 @@ NONE
 - Path: `/api/v3/agency/getAssert`
 - Category: `rebate`
 - Requires Auth: `True`
-- Weight(IP/UID): `20 / 20`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/GetAffiliateAssets
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `10`
+- Source: https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateAssets
 
 ### Request Parameters
 
@@ -806,20 +896,22 @@ NONE
 - Path: `/api/v3/rebate/affiliate/getAffiliateCommission`
 - Category: `rebate`
 - Requires Auth: `True`
-- Weight(IP/UID): `20 / 20`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/GetAffiliateCommission
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `20`
+- Source: https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateCommission
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `Long` | `` | `No` | Invited User UID |
-| `Long` | `` | `No` | Start timestamp in UTC (milliseconds). Default: 7 days ago,Max range: 3 months |
-| `Long` | `` | `No` | End timestamp in UTC (milliseconds). Default: current time,Max range: 3 months |
-| `String` | `` | `No` | USDT or BTC |
-| `String` | `` | `No` | SPOT or FUTURES (default SPOT) |
-| `Integer` | `` | `No` | Page number (starting from 1, default 1) |
-| `Integer` | `` | `No` | Page size (default 100) |
+| `uid` | `Long` | `No` | Invited User UID |
+| `startTime` | `Long` | `No` | Start timestamp in UTC (milliseconds). Default: 7 days ago,Max range: 3 months |
+| `endTime` | `Long` | `No` | End timestamp in UTC (milliseconds). Default: current time,Max range: 3 months |
+| `coin` | `String` | `No` | USDT or BTC |
+| `productType` | `String` | `No` | SPOT or FUTURES (default SPOT) |
+| `page` | `Integer` | `No` | Page number (starting from 1, default 1) |
+| `pageSize` | `Integer` | `No` | Page size (default 100) |
 
 ### Response Parameters
 
@@ -847,8 +939,10 @@ NONE
 - Path: `/api/v3/agency/getDealData`
 - Category: `rebate`
 - Requires Auth: `True`
-- Weight(IP/UID): `20 / 20`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/GetAffiliateDealData
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `10`
+- Source: https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateDealData
 
 ### Request Parameters
 
@@ -876,18 +970,24 @@ NONE
 - Path: `/api/v3/rebate/affiliate/getAffiliateUIDs`
 - Category: `rebate`
 - Requires Auth: `True`
-- Weight(IP/UID): `20 / 20`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/GetAffiliateUIDs
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `20`
+- Source: https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateUIDs
+- Request Constraints:
+  - End time must be later than the start time.
+  - The query window cannot exceed 90 consecutive days.
+  - The start time must be within the most recent 365 days; by default the system queries the last 90 days.
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `Long` | `` | `No` | Invited User UID |
-| `Long` | `` | `No` | Start timestamp in UTC (milliseconds). Must fall within the past 1 year; defaults to 90 days prior to endTime when omitted. |
-| `Long` | `` | `No` | End timestamp in UTC (milliseconds). Must be greater than startTime ; total range cannot exceed 90 days. |
-| `Integer` | `` | `No` | Page number (starting from 1, default 1) |
-| `Integer` | `` | `No` | Page size (default 100) |
+| `uid` | `Long` | `No` | Invited User UID |
+| `startTime` | `Long` | `No` | Start timestamp in UTC (milliseconds). Must fall within the past 1 year; defaults to 90 days prior to endTime when omitted. |
+| `endTime` | `Long` | `No` | End timestamp in UTC (milliseconds). Must be greater than startTime ; total range cannot exceed 90 days. |
+| `page` | `Integer` | `No` | Page number (starting from 1, default 1) |
+| `pageSize` | `Integer` | `No` | Page size (default 100) |
 
 ### Response Parameters
 
@@ -912,18 +1012,24 @@ NONE
 - Path: `/api/v3/rebate/affiliate/getChannelUserTradeAndAsset`
 - Category: `rebate`
 - Requires Auth: `True`
-- Weight(IP/UID): `20 / 20`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/GetChannelUserTradeAndAsset
+- Request Transport: `query`
+- Response Container: `object`
+- Weight(IP): `20`
+- Source: https://www.weex.com/api-doc/partner/rebate-endpoints/GetChannelUserTradeAndAsset
+- Request Constraints:
+  - End time must be later than the start time.
+  - The query window cannot exceed 90 consecutive days.
+  - The start time must be within the most recent 365 days; by default the system queries the last 90 days.
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `Long` | `` | `No` | Invited User UID |
-| `Long` | `` | `No` | Start timestamp in UTC (milliseconds) |
-| `Long` | `` | `No` | End timestamp in UTC (milliseconds) |
-| `Integer` | `` | `No` | Page number (starting from 1, default 1) |
-| `Integer` | `` | `No` | Page size (default 100) |
+| `uid` | `Long` | `No` | Invited User UID |
+| `startTime` | `Long` | `No` | Start timestamp in UTC (milliseconds) |
+| `endTime` | `Long` | `No` | End timestamp in UTC (milliseconds) |
+| `page` | `Integer` | `No` | Page number (starting from 1, default 1) |
+| `pageSize` | `Integer` | `No` | Page size (default 100) |
 
 ### Response Parameters
 
@@ -946,22 +1052,26 @@ NONE
 - Path: `/api/v3/rebate/affiliate/internalWithdrawal`
 - Category: `rebate`
 - Requires Auth: `True`
-- Weight(IP/UID): `100 / 100`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/InternalWithdrawal
+- Request Transport: `body`
+- Response Container: `string`
+- Weight(IP): `100`
+- Source: https://www.weex.com/api-doc/partner/rebate-endpoints/InternalWithdrawal
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `Long` | `` | `Yes` | Transfer-in user ID |
-| `String` | `` | `Yes` | Currency type (USDT, BTC) |
-| `String` | `` | `Yes` | Transfer amount (Up to 6 decimal places) |
-| `String` | `` | `No` | Type of the originating account (SPOT: spot wallet, FUND: funding wallet, Default: SPOT) |
-| `String` | `` | `No` | Type of the target account (SPOT: spot wallet, FUND: funding wallet, Default: SPOT) |
+| `toUserId` | `Long` | `Yes` | Transfer-in user ID |
+| `coin` | `String` | `Yes` | Currency type (USDT, BTC) |
+| `amount` | `String` | `Yes` | Transfer amount (Up to 6 decimal places) |
+| `fromAccountType` | `String` | `No` | Type of the originating account (SPOT: spot wallet, FUND: funding wallet, Default: SPOT) |
+| `toAccountType` | `String` | `No` | Type of the target account (SPOT: spot wallet, FUND: funding wallet, Default: SPOT) |
 
 ### Response Parameters
 
-NONE
+| Name | Type | Description |
+|---|---|---|
+| `$` | `String` | Returns the transfer ID as a string when the request succeeds. |
 
 ## spot.rebate.query_sub_channel_transactions — Get Subaffiliates Data (affiliate only)
 
@@ -969,19 +1079,21 @@ NONE
 - Path: `/api/v3/rebate/affiliate/querySubChannelTransactions`
 - Category: `rebate`
 - Requires Auth: `True`
-- Weight(IP/UID): `10 / 10`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/QuerySubChannelTransactions
+- Request Transport: `body`
+- Response Container: `object`
+- Weight(IP): `10`
+- Source: https://www.weex.com/api-doc/partner/rebate-endpoints/QuerySubChannelTransactions
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `Long` | `` | `No` | Sub-affiliate's UID |
-| `Long` | `` | `No` | Start timestamp (UTC milliseconds) |
-| `Long` | `` | `No` | End timestamp (UTC milliseconds) |
-| `String` | `` | `Yes` | Product type (SPOT or FUTURES) |
-| `Integer` | `` | `No` | Page number (starts from 1, default 1) |
-| `Integer` | `` | `No` | Items per page (default 100) |
+| `subUid` | `Long` | `No` | Sub-affiliate's UID |
+| `startTime` | `Long` | `No` | Start timestamp (UTC milliseconds) |
+| `endTime` | `Long` | `No` | End timestamp (UTC milliseconds) |
+| `productType` | `String` | `Yes` | Product type (SPOT or FUTURES) |
+| `pageNum` | `Integer` | `No` | Page number (starts from 1, default 1) |
+| `pageSize` | `Integer` | `No` | Items per page (default 100) |
 
 ### Response Parameters
 
@@ -1005,8 +1117,10 @@ NONE
 - Path: `/api/v3/agency/verifyReferrals`
 - Category: `rebate`
 - Requires Auth: `True`
-- Weight(IP/UID): `20 / 20`
-- Source: https://www.weex.com/api-doc/spot/rebate-endpoints/VerifyReferrals
+- Request Transport: `query`
+- Response Container: `array`
+- Weight(IP): `10`
+- Source: https://www.weex.com/api-doc/partner/rebate-endpoints/VerifyReferrals
 
 ### Request Parameters
 
@@ -1020,3 +1134,42 @@ NONE
 |---|---|---|
 | `uid` | `Long` | UID that was checked |
 | `isRefferal` | `Boolean` | true if the UID belongs to the current affiliate |
+
+## Spot Tax Endpoint Sections
+
+## spot.tax.get_spot_account_record — Spot Transaction Records (USER_DATA)
+
+- Method: `POST`
+- Path: `/api/v3/tax/income`
+- Category: `tax`
+- Requires Auth: `True`
+- Request Transport: `body`
+- Response Container: `array`
+- Permission: `USER_DATA`
+- Weight(IP): `5`
+- Source: https://www.weex.com/api-doc/spot/tax/GetSpotAccountRecord
+
+### Request Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `coin` | `String` | `No` | Filter by asset name (exact match). Example: USDT . |
+| `bizType` | `String` | `No` | Filter by business type. Supported values: deposit , withdraw , trade_out , etc. |
+| `month` | `String` | `No` | Query month in YYYY-mm format, e.g., 2026-01 . Defaults to the current month if not provided. |
+| `limit` | `Integer` | `No` | Number of records per page. Default: 10 . Maximum: 200 . |
+| `page` | `Integer` | `No` | Page number (starting from 1 ). Default: 1 . |
+
+### Response Parameters
+
+| Name | Type | Description |
+|---|---|---|
+| `billId` | `String` | Bill identifier. |
+| `coinId` | `Integer` | Asset ID. |
+| `coinName` | `String` | Asset symbol. |
+| `bizType` | `String` | Business type. |
+| `fillSize` | `String` | Filled quantity (if applicable). |
+| `fillValue` | `String` | Filled value (if applicable). |
+| `deltaAmount` | `String` | Amount change. |
+| `afterAmount` | `String` | Balance after the change. |
+| `fees` | `String` | Fees charged. |
+| `cTime` | `String` | Creation time (ms). |

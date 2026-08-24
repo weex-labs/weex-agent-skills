@@ -6,7 +6,7 @@ This reference defines deterministic orchestration above the trader-owned REST e
 
 - `list-referral-uids`: one UID or explicitly confirmed all-referrals scope; 90-day official minimum/default segment, 365-day history boundary.
 - `get-direct-trade-asset`: one UID or explicitly confirmed all-referrals scope; 90-day official minimum/default segment, 365-day history boundary.
-- `get-commission`: one UID or explicitly confirmed all-referrals scope; official minimum/default is 7 days; `product_type` defaults to `SPOT`. A bounded explicit range longer than three calendar months starts with its latest three-calendar-month segment and continues only within that original range.
+- `get-commission`: one UID or explicitly confirmed all-referrals scope; official minimum/default is 7 days; `product_type` defaults to `SPOT`; the optional `coin` filter accepts only `USDT` or `BTC`, and every other value is rejected before REST. A bounded explicit range longer than three calendar months starts with its latest three-calendar-month segment and continues only within that original range.
 - `get-sub-agent-stats`: one sub-UID or explicitly confirmed all scope; `product_type` is required. Time is required for production. A profile already verified as `partner_test` may pass `expected_environment=partner_test` and omit time, producing `partner_test_upstream_default` with explicit null time values and no bounded-range claim.
 - `verify-referrals`: one or more UIDs; groups larger than 100 are split without overlap.
 - `get-referral-assets`: exactly one UID and explicit `YYYY-MM-DD` start/end dates.
@@ -53,6 +53,7 @@ Use these rows as behavior fixtures, not as an exhaustive phrase list. Reuse a p
 | `reject_internal_transfer` | `partner_write_unsupported` |
 | `reject_uid_contact_match` | `account_identity_check_unsupported` |
 | `reject_cross_partner` | `cross_partner_query_unsupported` |
+| `reject_invalid_commission_coin` | `invalid_coin` |
 | `delegate_order_to_trader` | `normal_order_uses_trader_confirmation_gate` |
 | `reject_fund_transfer` | `partner_skill_does_not_transfer_funds` |
 | `reject_withdrawal` | `partner_skill_does_not_withdraw` |

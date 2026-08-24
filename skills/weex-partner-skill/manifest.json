@@ -50,6 +50,7 @@
       "output_schema": "references/partner-output-schema.md",
       "field_catalog": "references/partner-field-catalog.json",
       "natural_language_regression": "references/natural-language-regression.json",
+      "official_contract_drift_check": "scripts/check_official_partner_contract.py",
       "file_level_details": "file-index.json"
     }
   },

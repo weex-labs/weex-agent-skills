@@ -247,10 +247,13 @@ class GuiBootstrapTests(unittest.TestCase):
     def test_cli_help_renders(self) -> None:
         parser = bootstrap.build_parser()
 
-        with self.assertRaises(SystemExit) as exc_info:
-            parser.parse_args(["--help"])
+        stdout = io.StringIO()
+        with mock.patch.object(sys, "stdout", stdout):
+            with self.assertRaises(SystemExit) as exc_info:
+                parser.parse_args(["--help"])
 
         self.assertEqual(exc_info.exception.code, 0)
+        self.assertIn("usage:", stdout.getvalue())
 
     def test_cli_ensure_without_accept_returns_structured_error(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:

@@ -109,6 +109,43 @@
           "references/trade-data-schema.md"
         ]
       },
+      "automated_strategy_authorization": {
+        "entrypoints": [
+          "scripts/weex_auto_trade.py",
+          "scripts/weex_auto_trade_notify.py",
+          "scripts/weex_auto_trade_runtime.py",
+          "scripts/weex_trade_guard.py"
+        ],
+        "open_first": [
+          "scripts/weex_auto_trade.py",
+          "scripts/weex_auto_trade_state.py",
+          "scripts/weex_auto_trade_amount.py",
+          "scripts/weex_auto_trade_notify.py",
+          "scripts/weex_auto_trade_runtime.py",
+          "scripts/weex_trade_guard.py",
+          "references/script-operations.md"
+        ],
+        "commands": [
+          "register-strategy",
+          "list-strategies",
+          "retire-strategy",
+          "ensure-authorization",
+          "show-authorization-request",
+          "grant-authorization",
+          "list-authorizations",
+          "revoke-authorization",
+          "submit-auto",
+          "resolve-auto-usage",
+          "enable-auto-trading-after-restore",
+          "reconcile-auto-order",
+          "event-list",
+          "snapshot-state",
+          "restore-state"
+        ],
+        "trading_mode": "real trading only",
+        "profile_policy": "saved profiles only",
+        "state_owner": "scripts/weex_auto_trade_state.py behind the stable facade and guard"
+      },
       "profile_management": {
         "entrypoints": [
           "scripts/weex_gui_launcher.py",
@@ -184,6 +221,48 @@
         "scripts/weex_trade_guard.py",
         "scripts/weex_order_intent_state.py"
       ],
+      "preview TP/SL conditional-order risk": [
+        "scripts/weex_trade_guard.py",
+        "scripts/weex_order_intent_state.py",
+        "references/contract-api-definitions.json"
+      ],
+      "confirm a TP/SL conditional order": [
+        "scripts/weex_trade_guard.py",
+        "scripts/weex_contract_api.py",
+        "scripts/weex_order_intent_state.py",
+        "references/contract-api-definitions.json"
+      ],
+      "register or authorize an automated strategy": [
+        "scripts/weex_auto_trade.py",
+        "scripts/weex_auto_trade_state.py",
+        "scripts/weex_profile_store.py"
+      ],
+      "submit an authorized automated order": [
+        "scripts/weex_trade_guard.py",
+        "scripts/weex_auto_trade_amount.py",
+        "scripts/weex_auto_trade_state.py",
+        "references/contract-api-definitions.json",
+        "references/spot-api-definitions.json"
+      ],
+      "inspect automated authorization events or reconcile an order": [
+        "scripts/weex_auto_trade.py",
+        "scripts/weex_auto_trade_state.py"
+      ],
+      "snapshot or restore automated authorization state": [
+        "scripts/weex_auto_trade.py",
+        "scripts/weex_auto_trade_state.py",
+        "references/script-operations.md"
+      ],
+      "resolve uncertain automated usage or re-enable automatic trading": [
+        "scripts/weex_auto_trade.py",
+        "scripts/weex_auto_trade_state.py",
+        "references/script-operations.md"
+      ],
+      "dispatch automated authorization notifications": [
+        "scripts/weex_auto_trade_notify.py",
+        "scripts/weex_auto_trade_state.py",
+        "references/script-operations.md"
+      ],
       "inspect or edit saved accounts": [
         "scripts/weex_gui_launcher.py",
         "scripts/weex_profiles_cli.py",
@@ -212,6 +291,8 @@
   },
   "state": {
     "profile_metadata_path": "~/.weex-trader-skill/profiles.meta.json",
+    "automated_authorization_database_path": "~/.weex-trader-skill/auto-trade/authorization-state.sqlite3",
+    "automated_authorization_snapshot_path": "~/.weex-trader-skill/snapshots/",
     "agent_state_paths": {
       "init": "~/.weex-trader-skill/agent-init.json",
       "runtime": "~/.weex-trader-skill/agent-runtime.json"
@@ -222,6 +303,7 @@
     "env_vars": {
       "WEEX_TRADER_SKILL_HOME": "Override the runtime state directory for profiles, vault data, and agent cache.",
       "WEEX_API_TIMEOUT": "Override HTTP timeout in seconds; Partner REST defaults to 30 seconds.",
+      "WEEX_AUTO_TRADE_NOTIFICATION_MODE": "Set to disabled only for controlled tests or an operator-approved environment where automated-authorization OS notifications are intentionally suppressed.",
       "WEEX_ORDER_INTENT_TTL_SECONDS": "Override the pending order confirmation TTL in seconds for trade guard flows.",
       "WEEX_GUI_FORCE_FOREGROUND": "Disable GUI auto-detach and keep the GUI entrypoint attached to the current shell, which can reintroduce a Terminal/cmd window."
     }

@@ -22,11 +22,13 @@ README = ROOT / "README.md"
 MANIFEST = ROOT / "manifest.json"
 FILE_INDEX = ROOT / "file-index.json"
 REPO_README = REPO_ROOT / "README.md"
+ZH_REPO_README = REPO_ROOT / "README.zh-CN.md"
 AGENTS_GUIDE = REPO_ROOT / "AGENTS.md"
 CLAUDE_GUIDE = REPO_ROOT / "CLAUDE.md"
 COPILOT_GUIDE = REPO_ROOT / ".github" / "copilot-instructions.md"
 CLEAN_CHECKOUT_TOOL = REPO_ROOT / "tools" / "clean_local_skill_checkout.py"
 INSTALL_LOCAL_SKILLS_TOOL = REPO_ROOT / "tools" / "install_local_skills.py"
+OPENCLAW_UPDATE_SCRIPT = ROOT / "scripts" / "update_openclaw_skills.sh"
 SYNC_RISK_REVIEW_TOOL = REPO_ROOT / "tools" / "sync_weex_risk_review_core.py"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "skills-ci.yml"
 SHARED_RISK_REVIEW_SOURCE = REPO_ROOT / "skills" / "_shared" / "weex_risk_review_core.py"
@@ -51,7 +53,7 @@ TRADE_GUARD_SCRIPT = ROOT / "scripts" / "weex_trade_guard.py"
 API_DEFINITION_GENERATOR = ROOT / "scripts" / "generate_weex_api_definitions.py"
 REQUIREMENTS = ROOT / "requirements.txt"
 REQUIREMENTS_LOCK = ROOT / "requirements.lock"
-PUBLISHED_REPO_URL = "https://github.com/weex-labs/weex-trader-skill"
+PUBLISHED_REPO_URL = "https://github.com/weex-labs/weex-agent-skills"
 DOC_FILES = (
     SKILL,
     README,
@@ -166,15 +168,36 @@ def load_api_definition_generator():
 
 
 class RepoConsistencyTests(unittest.TestCase):
+    def test_skill_frontmatter_is_portable_and_monitor_description_is_trigger_only(self) -> None:
+        analysis_skill = REPO_ROOT / "skills" / "weex-analysis-skill" / "SKILL.md"
+        monitor_skill = REPO_ROOT / "skills" / "weex-monitor-skill" / "SKILL.md"
+
+        for path in (SKILL, analysis_skill):
+            with self.subTest(path=path.as_posix()):
+                frontmatter = path.read_text(encoding="utf-8").split("---", 2)[1]
+                self.assertNotIn("metadata:", frontmatter)
+                self.assertNotIn("local-path", frontmatter)
+                self.assertNotIn("/var/folders/", frontmatter)
+
+        monitor_frontmatter = monitor_skill.read_text(encoding="utf-8").split("---", 2)[1]
+        description = next(
+            line.removeprefix("description:").strip()
+            for line in monitor_frontmatter.splitlines()
+            if line.startswith("description:")
+        )
+        self.assertTrue(description.startswith("Use when "))
+        for workflow_word in ("drafts", "confirms", "stores", "evaluates", "runs", "reports"):
+            self.assertNotIn(workflow_word, description)
+
     def test_internal_withdrawal_status_is_removed_and_cannot_be_regenerated(self) -> None:
         removed_key = "spot.rebate.get_internal_withdrawal_status"
         removed_path = "/api/v3/rebate/affiliate/getInternalWithdrawalStatus"
         removed_doc = (
-            "https://www.weex.com/api-doc/spot/rebate-endpoints/"
+            "https://www.weex.com/api-doc/partner/rebate-endpoints/"
             "GetInternalWithdrawalStatus"
         )
         kept_doc = (
-            "https://www.weex.com/api-doc/spot/rebate-endpoints/"
+            "https://www.weex.com/api-doc/partner/rebate-endpoints/"
             "GetAffiliateCommission"
         )
         partner = json.loads(PARTNER_API_DEFINITIONS.read_text(encoding="utf-8"))
@@ -186,7 +209,7 @@ class RepoConsistencyTests(unittest.TestCase):
             "partner.get-internal-withdrawal-status",
             {item["key"] for item in partner["definitions"]},
         )
-        self.assertEqual(len(spot_by_key), 32)
+        self.assertEqual(len(spot_by_key), 33)
         self.assertNotIn(removed_key, spot_by_key)
         self.assertNotIn(removed_path, spot_md)
         kept_write = spot_by_key["spot.rebate.internal_withdrawal"]
@@ -296,11 +319,18 @@ class RepoConsistencyTests(unittest.TestCase):
     def test_readmes_reference_published_github_install_source(self) -> None:
         readme_text = README.read_text(encoding="utf-8")
         repo_readme_text = REPO_README.read_text(encoding="utf-8")
+        zh_readme_text = ZH_REPO_README.read_text(encoding="utf-8")
+        openclaw_script_text = OPENCLAW_UPDATE_SCRIPT.read_text(encoding="utf-8")
 
         self.assertIn(PUBLISHED_REPO_URL, readme_text)
         self.assertIn(PUBLISHED_REPO_URL, repo_readme_text)
+        self.assertIn(PUBLISHED_REPO_URL, zh_readme_text)
+        self.assertIn(PUBLISHED_REPO_URL, openclaw_script_text)
+        self.assertIn('readonly APPROVED_COMMIT="', openclaw_script_text)
+        self.assertIn('readonly DEFAULT_BRANCH="main"', openclaw_script_text)
         self.assertNotIn("https://github.com/drgnchan/weex-trader-skill", readme_text)
         self.assertNotIn("https://github.com/drgnchan/weex-trader-skill", repo_readme_text)
+        self.assertNotIn("https://github.com/drgnchan/weex-trader-skill", zh_readme_text)
 
     def test_skill_identity_matches_manifest(self) -> None:
         skill_name = extract_frontmatter_name(SKILL.read_text(encoding="utf-8"))
@@ -322,6 +352,33 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIn("out-of-range or stale number", skill_text)
         self.assertIn("show the current choices again", skill_text)
         self.assertIn("reuse that saved profile for later turns in the same conversation", skill_text)
+
+    def test_automated_authorization_requires_explicit_quota_and_bounded_activation(self) -> None:
+        skill_text = SKILL.read_text(encoding="utf-8")
+        readme_text = README.read_text(encoding="utf-8")
+        root_readme_text = REPO_README.read_text(encoding="utf-8")
+        zh_readme_text = ZH_REPO_README.read_text(encoding="utf-8")
+
+        for text in (skill_text, readme_text, root_readme_text):
+            self.assertIn(
+                "Never derive `max_total_amount` from frequency, validity, target amount, "
+                "max_single_amount, balance, or expected order count.",
+                text,
+            )
+            self.assertIn(
+                "A real-trading automation may become `ACTIVE` only in the same atomic "
+                "update that includes an `UNTIL` no later than the authorization expiry",
+                text,
+            )
+            self.assertIn(
+                "If the runtime cannot update status and expiry atomically, keep the "
+                "automation `PAUSED`.",
+                text,
+            )
+
+        self.assertIn("不得根据频率、有效期、目标金额、单笔上限、余额或预计笔数推算", zh_readme_text)
+        self.assertIn("`ACTIVE` 和不晚于授权到期时间的 `UNTIL`", zh_readme_text)
+        self.assertIn("同一次原子更新中同时写入", zh_readme_text)
 
     def test_skill_documents_localized_user_facing_trading_mode_labels(self) -> None:
         skill_text = SKILL.read_text(encoding="utf-8")
@@ -386,12 +443,15 @@ class RepoConsistencyTests(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_skill_frontmatter_declares_compatibility(self) -> None:
-        compatibility = extract_frontmatter_field(SKILL.read_text(encoding="utf-8"), "compatibility")
+    def test_skill_body_declares_compatibility(self) -> None:
+        skill_text = SKILL.read_text(encoding="utf-8")
+        frontmatter = skill_text.split("---", 2)[1]
+        body = skill_text.split("---", 2)[2]
 
-        self.assertIn("Python", compatibility)
-        self.assertIn("network", compatibility)
-        self.assertIn("Tk", compatibility)
+        self.assertNotIn("compatibility:", frontmatter)
+        self.assertIn("Python", body)
+        self.assertIn("network", body)
+        self.assertIn("Tk", body)
 
     def test_documented_repo_paths_exist(self) -> None:
         referenced_paths: set[str] = set()
@@ -409,14 +469,53 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIn(expected, PROFILE_ONBOARDING_REFERENCE.read_text(encoding="utf-8"))
         self.assertIn(expected, LINUX_VAULT_REFERENCE.read_text(encoding="utf-8"))
 
-    def test_script_operations_documents_raw_call_argument_order_and_post_query_guard(self) -> None:
+    def test_script_operations_documents_raw_call_argument_order_and_transport_guard(self) -> None:
         text = SCRIPT_OPERATIONS_REFERENCE.read_text(encoding="utf-8")
 
         self.assertIn("--profile is a global argument", text)
         self.assertIn("place it before `call`", text)
         self.assertIn("use `--endpoint <key>`", text)
-        self.assertIn("Some official query endpoints use POST", text)
-        self.assertIn("protected as mutating by the local guard", text)
+        self.assertIn("generated `request_transport`", text)
+        self.assertIn("`USER_DATA` POST endpoints are read-only", text)
+        self.assertIn("`TRADE` endpoints", text)
+
+    def test_tp_sl_full_position_quantity_semantics_are_documented(self) -> None:
+        for path in (SKILL, README):
+            with self.subTest(path=path.name):
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("transaction.place_tp_sl_order", text)
+                self.assertIn("`quantity`", text)
+                self.assertIn("`0` or omitted", text)
+                self.assertIn("full position", text)
+                self.assertIn("must not ask for quantity", text)
+                self.assertIn("confirmation", text)
+
+    def test_script_operations_documents_current_contract_constraints(self) -> None:
+        text = SCRIPT_OPERATIONS_REFERENCE.read_text(encoding="utf-8")
+
+        self.assertIn("`POST_ONLY`", text)
+        self.assertIn("`transaction.place_orders_batch`", text)
+        self.assertIn("at most 5 orders", text)
+        self.assertIn("`account.update_leverage_trade`", text)
+        self.assertIn("`crossLeverage`", text)
+        self.assertIn("`isolatedLongLeverage`", text)
+        self.assertIn("`isolatedShortLeverage`", text)
+        self.assertIn("at least one", text)
+        self.assertIn("`market.get_funding_rate_history`", text)
+        self.assertIn("`transaction.get_trade_details`", text)
+        self.assertIn("7 days", text)
+        self.assertIn("past 365 days", text)
+        self.assertIn("`transaction.place_tp_sl_order`", text)
+        self.assertIn("full position", text)
+
+    def test_trade_data_schema_documents_futures_bill_cursor_degradation(self) -> None:
+        text = TRADE_DATA_SCHEMA_REFERENCE.read_text(encoding="utf-8")
+
+        self.assertIn("`nextKey.nextKeyId`", text)
+        self.assertIn("`nextKey.nextKeyTime`", text)
+        self.assertIn("`futures_bills_cursor_stalled`", text)
+        self.assertIn("`futures_bills_window_truncated`", text)
+        self.assertIn("`partial=true`", text)
 
     def test_setup_docs_avoid_shell_specific_line_continuations(self) -> None:
         offenders: list[str] = []
@@ -507,6 +606,17 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIn("weex-partner-skill", zh_readme_text)
         self.assertIn("自动化监控", zh_readme_text)
 
+    def test_openclaw_update_script_is_part_of_the_trader_skill_source_of_truth(self) -> None:
+        self.assertTrue(
+            OPENCLAW_UPDATE_SCRIPT.exists(),
+            "OpenClaw update script is not implemented yet; expected RED.",
+        )
+        skill_text = SKILL.read_text(encoding="utf-8")
+        file_index = json.loads(FILE_INDEX.read_text(encoding="utf-8"))
+
+        self.assertIn("scripts/update_openclaw_skills.sh", skill_text)
+        self.assertIn("scripts/update_openclaw_skills.sh", file_index["file_guide"])
+
     def test_machine_readable_metadata_describes_application_vault_consistently(self) -> None:
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
         file_index = json.loads(FILE_INDEX.read_text(encoding="utf-8"))
@@ -590,18 +700,89 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertEqual(invalid, [])
         self.assertIn("spot.market.get_ticker_info", spot_reference_text)
 
+    def test_compact_endpoint_references_use_current_docs_and_catalog_groups(self) -> None:
+        contract_text = (ROOT / "references" / "contract-endpoints.md").read_text(encoding="utf-8")
+        spot_text = (ROOT / "references" / "spot-endpoints.md").read_text(encoding="utf-8")
+
+        self.assertIn("https://www.weex.com/api-doc/contract/changelog", contract_text)
+        self.assertIn("`market.*`", contract_text)
+        self.assertIn("`account.*`", contract_text)
+        self.assertIn("`transaction.*`", contract_text)
+        self.assertIn("`sim.*`", contract_text)
+        self.assertIn("`POST /capi/v3/sim/order`", contract_text)
+        self.assertNotIn("/contract/log/changelog", contract_text)
+        self.assertNotIn("Market: `/capi/v3/market/*`", contract_text)
+        self.assertNotIn("Account: `/capi/v3/account/*`", contract_text)
+
+        self.assertIn("https://www.weex.com/api-doc/spot/changelog", spot_text)
+        self.assertIn("`spot.tax.*`", spot_text)
+        self.assertIn("`spot.rebate.*`", spot_text)
+        self.assertIn("Partner rebate", spot_text)
+        self.assertNotIn("/spot/log/changelog", spot_text)
+
+    def test_definition_regeneration_scope_includes_current_raw_doc_families(self) -> None:
+        text = SCRIPT_OPERATIONS_REFERENCE.read_text(encoding="utf-8")
+
+        self.assertIn("spot tax", text)
+        self.assertIn("current Partner rebate", text)
+        self.assertIn("contract demo", text)
+
+    def test_manifest_routes_tp_sl_preview_and_confirmation(self) -> None:
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        task_map = manifest["routing"]["task_map"]
+
+        preview_files = [
+            "scripts/weex_trade_guard.py",
+            "scripts/weex_order_intent_state.py",
+            "references/contract-api-definitions.json",
+        ]
+        confirm_files = [
+            "scripts/weex_trade_guard.py",
+            "scripts/weex_contract_api.py",
+            "scripts/weex_order_intent_state.py",
+            "references/contract-api-definitions.json",
+        ]
+        self.assertEqual(task_map["preview TP/SL conditional-order risk"], preview_files)
+        self.assertEqual(task_map["confirm a TP/SL conditional order"], confirm_files)
+
+    def test_manifest_routes_automated_recovery_and_notification_operations(self) -> None:
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        task_map = manifest["routing"]["task_map"]
+        domain = manifest["routing"]["domains"]["automated_strategy_authorization"]
+
+        self.assertIn(
+            "resolve uncertain automated usage or re-enable automatic trading",
+            task_map,
+        )
+        self.assertIn("dispatch automated authorization notifications", task_map)
+        self.assertIn("scripts/weex_auto_trade_notify.py", domain["entrypoints"])
+        self.assertIn(
+            "WEEX_AUTO_TRADE_NOTIFICATION_MODE",
+            manifest["state"]["env_vars"],
+        )
+        operations = SCRIPT_OPERATIONS_REFERENCE.read_text(encoding="utf-8")
+        for field in (
+            "snapshot_id",
+            "created_at",
+            "relative_path",
+            "database_schema_version",
+            "size_bytes",
+            "sha256",
+        ):
+            self.assertIn(f"`{field}`", operations)
+
     def test_contract_definitions_include_futures_demo_endpoints(self) -> None:
         definitions = json.loads((ROOT / "references" / "contract-api-definitions.json").read_text(encoding="utf-8"))
         by_key = {definition["key"]: definition for definition in definitions["definitions"]}
 
         expected = {
-            "sim.account.get_account_balance": ("GET", "/capi/v3/sim/balance", "USER_DATA", 5, 10),
-            "sim.transaction.place_order": ("POST", "/capi/v3/sim/order", "TRADE", 2, 5),
-            "sim.account.get_all_positions": ("GET", "/capi/v3/sim/position/allPosition", "USER_DATA", 10, 15),
-            "sim.transaction.get_order_history": ("GET", "/capi/v3/sim/order/history", "USER_DATA", 10, 10),
+            "sim.account.get_account_balance": ("GET", "/capi/v3/sim/balance", "USER_DATA", 5),
+            "sim.transaction.place_order": ("POST", "/capi/v3/sim/order", "TRADE", None),
+            "sim.account.get_all_positions": ("GET", "/capi/v3/sim/position/allPosition", "USER_DATA", 10),
+            "sim.transaction.get_order_history": ("GET", "/capi/v3/sim/order/history", "USER_DATA", 10),
         }
 
-        for key, (method, path, permission, weight_ip, weight_uid) in expected.items():
+        for key, (method, path, permission, weight_ip) in expected.items():
             with self.subTest(key=key):
                 definition = by_key[key]
                 self.assertEqual(definition["category"], "sim")
@@ -609,8 +790,17 @@ class RepoConsistencyTests(unittest.TestCase):
                 self.assertEqual(definition["path"], path)
                 self.assertTrue(definition["requires_auth"])
                 self.assertEqual(definition["permission"], permission)
-                self.assertEqual(definition["weight_ip"], weight_ip)
-                self.assertEqual(definition["weight_uid"], weight_uid)
+                self.assertEqual(definition.get("weight_ip"), weight_ip)
+                self.assertNotIn("weight_uid", definition)
+
+        demo_limits = {
+            item["header"]: item["limit"]
+            for item in by_key["sim.transaction.place_order"]["rate_limits"]
+        }
+        self.assertEqual(
+            demo_limits,
+            {"X-ORDER-COUNT-10S": 1, "X-ORDER-COUNT-1M": 1, "X-USED-WEIGHT-1M": 0},
+        )
 
         order_params = {
             row["name"]: row
@@ -748,6 +938,8 @@ class RepoConsistencyTests(unittest.TestCase):
                 "scripts/weex_trade_data_aggregator.py",
                 "scripts/weex_order_intent_state.py",
                 "scripts/weex_trade_risk_review.py",
+                "scripts/weex_auto_trade_amount.py",
+                "scripts/weex_auto_trade_state.py",
             ],
         )
 

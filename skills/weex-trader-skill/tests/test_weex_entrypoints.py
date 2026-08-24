@@ -539,6 +539,55 @@ runpy.run_path(script_path, run_name="__main__")
 
         self.assertEqual(str(exc_info.exception), contract.GET_BODY_UNSUPPORTED_MESSAGE)
 
+    def test_contract_client_rejects_payload_in_wrong_documented_transport(self) -> None:
+        import weex_contract_api as contract
+
+        client = contract.WeexContractClient(
+            base_url=contract.DEFAULT_BASE_URL,
+            timeout=contract.DEFAULT_TIMEOUT,
+            locale=contract.DEFAULT_LOCALE,
+            api_key="api-key",
+            api_secret="api-secret",
+            api_passphrase="passphrase",
+        )
+        with mock.patch.object(client, "_require_auth"):
+            with self.assertRaisesRegex(SystemExit, "transport"):
+                client.prepare_request(
+                    contract.ENDPOINTS["transaction.cancel_order"],
+                    query={},
+                    body={"orderId": 1},
+                )
+            with self.assertRaisesRegex(SystemExit, "transport"):
+                client.prepare_request(
+                    contract.ENDPOINTS["transaction.cancel_orders_batch"],
+                    query={"orderIdList": [1]},
+                    body={},
+                )
+
+    def test_contract_user_data_post_is_read_only_and_does_not_require_trade_confirmation(self) -> None:
+        import weex_contract_api as contract
+
+        endpoint = contract.ENDPOINTS["account.get_contract_bills"]
+        self.assertEqual(endpoint.permission, "USER_DATA")
+        self.assertFalse(endpoint.mutating)
+
+    def test_contract_doc_suffix_lookup_rejects_ambiguous_matches(self) -> None:
+        import weex_contract_api as contract
+
+        endpoints = {
+            "live": types.SimpleNamespace(
+                key="live",
+                doc_url="https://www.weex.com/api-doc/contract/Transaction_API/PlaceOrder",
+            ),
+            "demo": types.SimpleNamespace(
+                key="demo",
+                doc_url="https://www.weex.com/api-doc/contract/demo/PlaceOrder",
+            ),
+        }
+        with mock.patch.object(contract, "ENDPOINTS", endpoints):
+            with self.assertRaisesRegex(SystemExit, "Ambiguous"):
+                contract.find_endpoint_key_by_doc_suffix("PlaceOrder")
+
     def test_contract_demo_order_dry_run_uses_sim_path_and_environment(self) -> None:
         import weex_contract_api as contract
 
@@ -697,6 +746,153 @@ runpy.run_path(script_path, run_name="__main__")
         self.assertIn("pending_close_requires_tp_sl", str(exc_info.exception))
         client.prepare_request.assert_not_called()
 
+    def test_contract_place_order_parser_accepts_post_only(self) -> None:
+        import weex_contract_api as contract
+
+        try:
+            args = contract.build_parser().parse_args(
+                [
+                    "place-order",
+                    "--symbol",
+                    "BTCUSDT",
+                    "--side",
+                    "BUY",
+                    "--position-side",
+                    "LONG",
+                    "--type",
+                    "LIMIT",
+                    "--quantity",
+                    "0.01",
+                    "--price",
+                    "69000",
+                    "--time-in-force",
+                    "POST_ONLY",
+                    "--dry-run",
+                ]
+            )
+        except SystemExit as exc:
+            self.fail(f"POST_ONLY should be accepted by the official contract order wrapper: {exc}")
+
+        self.assertEqual(args.time_in_force, "POST_ONLY")
+
+    def test_contract_raw_batch_rejects_more_than_five_orders_before_prepare(self) -> None:
+        import weex_contract_api as contract
+
+        client = mock.Mock()
+        client.prepare_request.return_value = {
+            "method": "POST",
+            "url": "https://api-contract.weex.com/capi/v3/batchOrders",
+            "headers": {},
+            "query": {},
+            "body": {},
+        }
+        with self.assertRaises(SystemExit) as exc_info:
+            contract.execute_endpoint(
+                client=client,
+                endpoint_key="transaction.place_orders_batch",
+                query={},
+                body={"batchOrders": [{"newClientOrderId": str(index)} for index in range(6)]},
+                dry_run=True,
+                confirm_live=False,
+                confirm_demo=False,
+                trading_mode="live",
+                pretty=False,
+            )
+
+        self.assertIn("at most 5", str(exc_info.exception))
+        client.prepare_request.assert_not_called()
+
+    def test_contract_raw_leverage_requires_at_least_one_leverage_field(self) -> None:
+        import weex_contract_api as contract
+
+        client = mock.Mock()
+        client.prepare_request.return_value = {
+            "method": "POST",
+            "url": "https://api-contract.weex.com/capi/v3/account/leverage",
+            "headers": {},
+            "query": {},
+            "body": {},
+        }
+        with self.assertRaises(SystemExit) as exc_info:
+            contract.execute_endpoint(
+                client=client,
+                endpoint_key="account.update_leverage_trade",
+                query={},
+                body={"symbol": "BTCUSDT"},
+                dry_run=True,
+                confirm_live=False,
+                confirm_demo=False,
+                trading_mode="live",
+                pretty=False,
+            )
+
+        self.assertIn("at least one leverage", str(exc_info.exception).lower())
+        client.prepare_request.assert_not_called()
+
+    def test_contract_raw_time_windows_reject_ranges_beyond_official_limits(self) -> None:
+        import weex_contract_api as contract
+
+        client = mock.Mock()
+        client.prepare_request.return_value = {
+            "method": "GET",
+            "url": "https://api-contract.weex.com/test",
+            "headers": {},
+            "query": {},
+            "body": {},
+        }
+        eight_days_ms = 8 * 24 * 60 * 60 * 1000
+        for endpoint_key in ("market.get_funding_rate_history", "transaction.get_trade_details"):
+            with self.subTest(endpoint_key=endpoint_key):
+                with self.assertRaises(SystemExit) as exc_info:
+                    contract.execute_endpoint(
+                        client=client,
+                        endpoint_key=endpoint_key,
+                        query={"startTime": 0, "endTime": eight_days_ms},
+                        body={},
+                        dry_run=True,
+                        confirm_live=False,
+                        confirm_demo=False,
+                        trading_mode="live",
+                        pretty=False,
+                    )
+                self.assertIn("7 days", str(exc_info.exception))
+
+        client.prepare_request.assert_not_called()
+
+    def test_contract_live_place_order_routes_to_live_endpoint(self) -> None:
+        import weex_contract_api as contract
+
+        args = types.SimpleNamespace(
+            symbol="BTCUSDT",
+            side="BUY",
+            position_side="LONG",
+            order_type="LIMIT",
+            quantity="0.01",
+            price="69000",
+            time_in_force="GTC",
+            new_client_order_id="live-order-1",
+            tp_trigger_price=None,
+            sl_trigger_price=None,
+            tp_working_type=None,
+            sl_working_type=None,
+            dry_run=True,
+            confirm_live=True,
+            confirm_demo=False,
+            trading_mode="live",
+            pretty=True,
+        )
+
+        with mock.patch.object(contract, "execute_endpoint", return_value=0) as execute_mock:
+            exit_code = contract.cmd_place_order(args, client=object())
+
+        self.assertEqual(exit_code, 0)
+        call_kwargs = execute_mock.call_args.kwargs
+        self.assertEqual(call_kwargs["endpoint_key"], "transaction.place_order")
+        self.assertEqual(call_kwargs["trading_mode"], "live")
+        self.assertTrue(call_kwargs["confirm_live"])
+        self.assertFalse(call_kwargs["confirm_demo"])
+        self.assertEqual(call_kwargs["body"]["symbol"], "BTCUSDT")
+
     def test_contract_demo_place_order_routes_to_sim_endpoint_maps_symbol_and_preserves_official_fields(self) -> None:
         import weex_contract_api as contract
 
@@ -769,6 +965,51 @@ runpy.run_path(script_path, run_name="__main__")
             client.prepare_request(endpoint, query={}, body={"symbol": "BTCUSDT"})
 
         self.assertEqual(str(exc_info.exception), spot.GET_BODY_UNSUPPORTED_MESSAGE)
+
+    def test_spot_raw_registry_excludes_all_partner_rebate_endpoints(self) -> None:
+        import weex_spot_api as spot
+
+        self.assertTrue(spot.ENDPOINTS)
+        self.assertFalse(any(endpoint.category == "rebate" for endpoint in spot.ENDPOINTS.values()))
+        self.assertNotIn("spot.rebate.internal_withdrawal", spot.ENDPOINTS)
+
+    def test_spot_user_data_posts_are_read_only(self) -> None:
+        import weex_spot_api as spot
+
+        for key in (
+            "spot.account.get_bill_records",
+            "spot.account.get_fund_bill_records",
+            "spot.tax.get_spot_account_record",
+        ):
+            with self.subTest(key=key):
+                endpoint = spot.ENDPOINTS[key]
+                self.assertEqual(endpoint.permission, "USER_DATA")
+                self.assertFalse(spot.is_mutating(endpoint))
+
+    def test_spot_client_rejects_payload_in_wrong_documented_transport(self) -> None:
+        import weex_spot_api as spot
+
+        client = spot.WeexSpotClient(
+            base_url=spot.DEFAULT_BASE_URL,
+            timeout=spot.DEFAULT_TIMEOUT,
+            locale=spot.DEFAULT_LOCALE,
+            api_key="api-key",
+            api_secret="api-secret",
+            api_passphrase="passphrase",
+        )
+        with mock.patch.object(client, "_require_auth"):
+            with self.assertRaisesRegex(SystemExit, "transport"):
+                client.prepare_request(
+                    spot.ENDPOINTS["spot.order.cancel_order"],
+                    query={},
+                    body={"orderId": 1},
+                )
+            with self.assertRaisesRegex(SystemExit, "transport"):
+                client.prepare_request(
+                    spot.ENDPOINTS["spot.account.get_bill_records"],
+                    query={"limit": 10},
+                    body={},
+                )
 
     def test_spot_private_order_result_includes_live_environment_prefix(self) -> None:
         import weex_spot_api as spot

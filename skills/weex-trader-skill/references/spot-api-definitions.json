@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-17",
+  "generated_at": "2026-07-31",
   "source": "https://www.weex.com/api-doc/sitemap.xml",
   "product": "spot",
   "definitions": [
@@ -8,10 +8,14 @@
       "title": "Get Account Information (USER_DATA)",
       "category": "account",
       "method": "GET",
-      "path": "/api/v3/account/",
+      "path": "/api/v3/account",
       "doc_url": "https://www.weex.com/api-doc/spot/AccountAPI/GetAccountBalance",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [],
+      "body_fields": [],
       "request_params": [],
+      "response_container": "object",
       "response_params": [
         {
           "name": "makerCommission",
@@ -79,17 +83,17 @@
           "description": "Asset balances."
         },
         {
-          "name": "-> asset",
+          "name": "balances[].asset",
           "type": "String",
           "description": "Asset symbol."
         },
         {
-          "name": "-> free",
+          "name": "balances[].free",
           "type": "String",
           "description": "Free balance."
         },
         {
-          "name": "-> locked",
+          "name": "balances[].locked",
           "type": "String",
           "description": "Locked balance."
         },
@@ -109,8 +113,12 @@
           "description": "Per-symbol maker/taker commission overrides."
         }
       ],
-      "weight_ip": 5,
-      "weight_uid": 5
+      "rate_limits": [],
+      "constraints": [
+        "NONE"
+      ],
+      "permission": "USER_DATA",
+      "weight_ip": 5
     },
     {
       "key": "spot.account.get_bill_records",
@@ -120,6 +128,15 @@
       "path": "/api/v3/account/bills",
       "doc_url": "https://www.weex.com/api-doc/spot/AccountAPI/GetBillRecords",
       "requires_auth": true,
+      "request_transport": "body",
+      "query_fields": [],
+      "body_fields": [
+        "coinId",
+        "bizType",
+        "after",
+        "before",
+        "limit"
+      ],
       "request_params": [
         {
           "name": "coinId",
@@ -152,6 +169,7 @@
           "description": "Number of records to return (default 10 , maximum 100 )."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
           "name": "billId",
@@ -204,8 +222,10 @@
           "description": "Creation time (ms)."
         }
       ],
-      "weight_ip": 5,
-      "weight_uid": 5
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "USER_DATA",
+      "weight_ip": 5
     },
     {
       "key": "spot.account.get_fund_bill_records",
@@ -215,6 +235,16 @@
       "path": "/api/v3/account/fundingBills",
       "doc_url": "https://www.weex.com/api-doc/spot/AccountAPI/GetFundBillRecords",
       "requires_auth": true,
+      "request_transport": "body",
+      "query_fields": [],
+      "body_fields": [
+        "coinId",
+        "bizType",
+        "startTime",
+        "endTime",
+        "pageIndex",
+        "pageSize"
+      ],
       "request_params": [
         {
           "name": "coinId",
@@ -253,6 +283,7 @@
           "description": "Page size (default 10, maximum 100)."
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "total",
@@ -285,8 +316,10 @@
           "description": "List of bill entries (see Get Spot Account Bills for field details)."
         }
       ],
-      "weight_ip": 5,
-      "weight_uid": 5
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "USER_DATA",
+      "weight_ip": 5
     },
     {
       "key": "spot.account.transfer_records",
@@ -296,6 +329,15 @@
       "path": "/api/v3/account/transferRecords",
       "doc_url": "https://www.weex.com/api-doc/spot/AccountAPI/TransferRecords",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "coinId",
+        "fromType",
+        "limit",
+        "after",
+        "before"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "coinId",
@@ -328,6 +370,7 @@
           "description": "Return records before this time (ms)."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
           "name": "coinName",
@@ -370,8 +413,10 @@
           "description": "Transfer time (ms)."
         }
       ],
-      "weight_ip": 3,
-      "weight_uid": 3
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "USER_DATA",
+      "weight_ip": 3
     },
     {
       "key": "spot.config.currency_info",
@@ -381,7 +426,11 @@
       "path": "/api/v3/coins",
       "doc_url": "https://www.weex.com/api-doc/spot/ConfigAPI/CurrencyInfo",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [],
+      "body_fields": [],
       "request_params": [],
+      "response_container": "array",
       "response_params": [
         {
           "name": "coin",
@@ -409,70 +458,74 @@
           "description": "Supported network information."
         },
         {
-          "name": "-> network",
+          "name": "networkList[].network",
           "type": "String",
           "description": "Network name (e.g. ERC20 )."
         },
         {
-          "name": "-> isDefault",
+          "name": "networkList[].isDefault",
           "type": "Boolean",
           "description": "Whether this is the default network."
         },
         {
-          "name": "-> depositEnable",
+          "name": "networkList[].depositEnable",
           "type": "Boolean",
           "description": "Whether deposits via this network are enabled."
         },
         {
-          "name": "-> withdrawEnable",
+          "name": "networkList[].withdrawEnable",
           "type": "Boolean",
           "description": "Whether withdrawals via this network are enabled."
         },
         {
-          "name": "-> withdrawFee",
+          "name": "networkList[].withdrawFee",
           "type": "String",
           "description": "Withdrawal fee."
         },
         {
-          "name": "-> withdrawMin",
+          "name": "networkList[].withdrawMin",
           "type": "String",
           "description": "Minimum withdrawal amount."
         },
         {
-          "name": "-> withdrawIntegerMultiple",
+          "name": "networkList[].withdrawIntegerMultiple",
           "type": "BigDecimal",
           "description": "Required multiple for withdrawals."
         },
         {
-          "name": "-> minConfirm",
+          "name": "networkList[].minConfirm",
           "type": "Integer",
           "description": "Minimum confirmations required for deposits."
         },
         {
-          "name": "-> withdrawTag",
+          "name": "networkList[].withdrawTag",
           "type": "Boolean",
           "description": "Whether a tag/memo is required."
         },
         {
-          "name": "-> depositDust",
+          "name": "networkList[].depositDust",
           "type": "String",
           "description": "Minimum deposit amount that will be credited."
         },
         {
-          "name": "-> contractAddress",
+          "name": "networkList[].contractAddress",
           "type": "String",
           "description": "Contract address (if applicable)."
         },
         {
-          "name": "-> contractAddressUrl",
+          "name": "networkList[].contractAddressUrl",
           "type": "String",
           "description": "Explorer URL for the contract."
         },
         {
-          "name": "-> depositDesc / withdrawDesc",
+          "name": "networkList[].depositDesc / withdrawDesc",
           "type": "String",
           "description": "Optional status messages when deposits/withdrawals are disabled."
         }
+      ],
+      "rate_limits": [],
+      "constraints": [
+        "NONE"
       ],
       "weight_ip": 5
     },
@@ -484,13 +537,21 @@
       "path": "/api/v3/apiTradingSymbols",
       "doc_url": "https://www.weex.com/api-doc/spot/ConfigAPI/GetAllProductInfo",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [],
+      "body_fields": [],
       "request_params": [],
+      "response_container": "array",
       "response_params": [
         {
-          "name": "symbols[]",
+          "name": "$",
           "type": "Array<String>",
           "description": "Raw response is an array of spot symbols available for API trading."
         }
+      ],
+      "rate_limits": [],
+      "constraints": [
+        "No parameters."
       ],
       "weight_ip": 5
     },
@@ -502,6 +563,13 @@
       "path": "/api/v3/exchangeInfo",
       "doc_url": "https://www.weex.com/api-doc/spot/ConfigAPI/GetProductInfo",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "symbols",
+        "symbolStatus"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -519,9 +587,10 @@
           "name": "symbolStatus",
           "type": "String",
           "required": "No",
-          "description": "Filter by symbol status. Currently only TRADING is supported."
+          "description": "Filter by symbol status. Values: TRADING (normal trading), HALT (trading suspended), BREAK (market closed)."
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "timezone",
@@ -534,121 +603,148 @@
           "description": "Current server time in milliseconds."
         },
         {
+          "name": "rateLimits",
+          "type": "Array<Object>",
+          "description": "API access rate limits."
+        },
+        {
+          "name": "rateLimits[].interval",
+          "type": "String",
+          "description": "Rate-limit interval unit, e.g. MINUTE ."
+        },
+        {
+          "name": "rateLimits[].intervalNum",
+          "type": "Integer",
+          "description": "Number of interval units, e.g. 1 ."
+        },
+        {
+          "name": "rateLimits[].limit",
+          "type": "Integer",
+          "description": "Maximum allowed count within the interval."
+        },
+        {
+          "name": "rateLimits[].rateLimitType",
+          "type": "String",
+          "description": "Rate-limit type, e.g. REQUEST_WEIGHT or ORDERS ."
+        },
+        {
           "name": "symbols",
           "type": "Array<Object>",
           "description": "Trading pair definitions."
         },
         {
-          "name": "-> symbol",
+          "name": "symbols[].symbol",
           "type": "String",
           "description": "Trading pair code, e.g. BTCUSDT ."
         },
         {
-          "name": "-> status",
+          "name": "symbols[].status",
           "type": "String",
-          "description": "Trading status, e.g. TRADING ."
+          "description": "Trading status. Values: TRADING (normal trading), HALT (trading suspended), BREAK (market closed)."
         },
         {
-          "name": "-> baseAsset",
+          "name": "symbols[].baseAsset",
           "type": "String",
           "description": "Base asset symbol."
         },
         {
-          "name": "-> baseAssetPrecision",
+          "name": "symbols[].baseAssetPrecision",
           "type": "Integer",
           "description": "Base asset precision."
         },
         {
-          "name": "-> quoteAsset",
+          "name": "symbols[].quoteAsset",
           "type": "String",
           "description": "Quote asset symbol."
         },
         {
-          "name": "-> quoteAssetPrecision",
+          "name": "symbols[].quoteAssetPrecision",
           "type": "Integer",
           "description": "Quote asset precision."
         },
         {
-          "name": "-> tickSize",
+          "name": "symbols[].tickSize",
           "type": "String",
           "description": "Minimum price increment (for quoteCoin)"
         },
         {
-          "name": "-> stepSize",
+          "name": "symbols[].stepSize",
           "type": "String",
           "description": "Minimum quantity increment (for baseCoin)"
         },
         {
-          "name": "-> minTradeAmount",
+          "name": "symbols[].minTradeAmount",
           "type": "BigDecimal",
           "description": "Minimum order quantity."
         },
         {
-          "name": "-> maxTradeAmount",
+          "name": "symbols[].maxTradeAmount",
           "type": "BigDecimal",
           "description": "Maximum order quantity."
         },
         {
-          "name": "-> takerFeeRate",
+          "name": "symbols[].takerFeeRate",
           "type": "BigDecimal",
           "description": "Taker fee rate."
         },
         {
-          "name": "-> makerFeeRate",
+          "name": "symbols[].makerFeeRate",
           "type": "BigDecimal",
           "description": "Maker fee rate."
         },
         {
-          "name": "-> buyLimitPriceRatio",
+          "name": "symbols[].buyLimitPriceRatio",
           "type": "BigDecimal",
           "description": "Maximum allowed deviation for buy limit orders."
         },
         {
-          "name": "-> sellLimitPriceRatio",
+          "name": "symbols[].sellLimitPriceRatio",
           "type": "BigDecimal",
           "description": "Maximum allowed deviation for sell limit orders."
         },
         {
-          "name": "-> marketBuyLimitSize",
+          "name": "symbols[].marketBuyLimitSize",
           "type": "BigDecimal",
           "description": "Per-order size limit for market buys."
         },
         {
-          "name": "-> marketSellLimitSize",
+          "name": "symbols[].marketSellLimitSize",
           "type": "BigDecimal",
           "description": "Per-order size limit for market sells."
         },
         {
-          "name": "-> marketFallbackPriceRatio",
+          "name": "symbols[].marketFallbackPriceRatio",
           "type": "BigDecimal",
           "description": "Fallback price ratio for market orders."
         },
         {
-          "name": "-> enableTrade",
+          "name": "symbols[].enableTrade",
           "type": "Boolean",
           "description": "Whether trading is enabled."
         },
         {
-          "name": "-> enableDisplay",
+          "name": "symbols[].enableDisplay",
           "type": "Boolean",
           "description": "Whether the symbol is displayed."
         },
         {
-          "name": "-> displayDigitMerge",
+          "name": "symbols[].displayDigitMerge",
           "type": "String",
           "description": "Depth merge configuration."
         },
         {
-          "name": "-> displayNew",
+          "name": "symbols[].displayNew",
           "type": "Boolean",
-          "description": "Whether the symbol is marked as ânewâ."
+          "description": "Whether the symbol is marked as “new”."
         },
         {
-          "name": "-> displayHot",
+          "name": "symbols[].displayHot",
           "type": "Boolean",
-          "description": "Whether the symbol is marked as âhotâ."
+          "description": "Whether the symbol is marked as “hot”."
         }
       ],
+      "rate_limits": [],
+      "constraints": [],
       "weight_ip": 20
     },
     {
@@ -659,13 +755,21 @@
       "path": "/api/v3/time",
       "doc_url": "https://www.weex.com/api-doc/spot/ConfigAPI/GetServerTime",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [],
+      "body_fields": [],
       "request_params": [],
+      "response_container": "object",
       "response_params": [
         {
           "name": "serverTime",
           "type": "Long",
           "description": "Current server time in milliseconds."
         }
+      ],
+      "rate_limits": [],
+      "constraints": [
+        "NONE"
       ],
       "weight_ip": 1
     },
@@ -677,8 +781,22 @@
       "path": "/api/v3/ping",
       "doc_url": "https://www.weex.com/api-doc/spot/ConfigAPI/Ping",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [],
+      "body_fields": [],
       "request_params": [],
-      "response_params": [],
+      "response_container": "object",
+      "response_params": [
+        {
+          "name": "$",
+          "type": "Object",
+          "description": "Returns an empty JSON object on success."
+        }
+      ],
+      "rate_limits": [],
+      "constraints": [
+        "NONE"
+      ],
       "weight_ip": 1
     },
     {
@@ -689,6 +807,12 @@
       "path": "/api/v3/market/ticker/24hr",
       "doc_url": "https://www.weex.com/api-doc/spot/MarketDataAPI/GetAllTickerInfo",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "symbols"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -703,6 +827,7 @@
           "description": "Multiple trading pairs. Accepts comma-separated values or a JSON array."
         }
       ],
+      "response_container": "conditional_object_or_array",
       "response_params": [
         {
           "name": "symbol",
@@ -785,6 +910,8 @@
           "description": "Number of trades in the 24h window."
         }
       ],
+      "rate_limits": [],
+      "constraints": [],
       "weight_ip": 2
     },
     {
@@ -795,6 +922,12 @@
       "path": "/api/v3/market/ticker/bookTicker",
       "doc_url": "https://www.weex.com/api-doc/spot/MarketDataAPI/GetBookTicker",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "symbols"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -809,6 +942,7 @@
           "description": "Multiple trading pairs. Accepts comma-separated values or a JSON array."
         }
       ],
+      "response_container": "conditional_object_or_array",
       "response_params": [
         {
           "name": "symbol",
@@ -836,6 +970,8 @@
           "description": "Best ask quantity."
         }
       ],
+      "rate_limits": [],
+      "constraints": [],
       "weight_ip": 4
     },
     {
@@ -846,6 +982,12 @@
       "path": "/api/v3/market/depth",
       "doc_url": "https://www.weex.com/api-doc/spot/MarketDataAPI/GetDepthData",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "limit"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -860,6 +1002,7 @@
           "description": "Number of depth entries. Supported values: 15 , 200 . Default 15 ."
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "lastUpdateId",
@@ -877,6 +1020,8 @@
           "description": "Ask depth entries formatted as [price, quantity] ."
         }
       ],
+      "rate_limits": [],
+      "constraints": [],
       "weight_ip": 5
     },
     {
@@ -887,6 +1032,12 @@
       "path": "/api/v3/market/klines",
       "doc_url": "https://www.weex.com/api-doc/spot/MarketDataAPI/GetKLineData",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "interval"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -898,44 +1049,58 @@
           "name": "interval",
           "type": "String",
           "required": "Yes",
-          "description": "Candlestick interval (e.g. [1m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,1w,1M])."
+          "description": "Candlestick interval (e.g. [1m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,1w])."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
+          "name": "0",
           "description": "Open time (ms)."
         },
         {
+          "name": "1",
           "description": "Open price."
         },
         {
+          "name": "2",
           "description": "High price."
         },
         {
+          "name": "3",
           "description": "Low price."
         },
         {
+          "name": "4",
           "description": "Close price."
         },
         {
+          "name": "5",
           "description": "Volume (base asset)."
         },
         {
+          "name": "6",
           "description": "Close time (ms)."
         },
         {
+          "name": "7",
           "description": "Quote asset volume."
         },
         {
+          "name": "8",
           "description": "Number of trades."
         },
         {
+          "name": "9",
           "description": "Taker buy volume (base asset)."
         },
         {
+          "name": "10",
           "description": "Taker buy volume (quote asset)."
         }
       ],
+      "rate_limits": [],
+      "constraints": [],
       "weight_ip": 2
     },
     {
@@ -946,6 +1111,12 @@
       "path": "/api/v3/market/ticker/price",
       "doc_url": "https://www.weex.com/api-doc/spot/MarketDataAPI/GetTickerInfo",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "symbols"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -960,6 +1131,7 @@
           "description": "Multiple trading pairs. Accepts comma-separated values or a JSON array."
         }
       ],
+      "response_container": "conditional_object_or_array",
       "response_params": [
         {
           "name": "symbol",
@@ -972,6 +1144,8 @@
           "description": "Latest traded price."
         }
       ],
+      "rate_limits": [],
+      "constraints": [],
       "weight_ip": 4
     },
     {
@@ -982,6 +1156,12 @@
       "path": "/api/v3/market/trades",
       "doc_url": "https://www.weex.com/api-doc/spot/MarketDataAPI/GetTradeData",
       "requires_auth": false,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "limit"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -993,9 +1173,10 @@
           "name": "limit",
           "type": "Integer",
           "required": "No",
-          "description": "Number of trades to return. Range 1 â 1000 , default 100 ."
+          "description": "Number of trades to return. Range 1 – 1000 , default 100 ."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
           "name": "id",
@@ -1033,6 +1214,8 @@
           "description": "true if the trade matched the best price level."
         }
       ],
+      "rate_limits": [],
+      "constraints": [],
       "weight_ip": 25
     },
     {
@@ -1043,6 +1226,12 @@
       "path": "/api/v3/order/batch",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/BulkCancel",
       "requires_auth": true,
+      "request_transport": "body",
+      "query_fields": [],
+      "body_fields": [
+        "orderIds",
+        "origClientOrderIds"
+      ],
       "request_params": [
         {
           "name": "orderIds",
@@ -1057,6 +1246,7 @@
           "description": "Client order IDs to cancel. Required when orderIds is empty."
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "orderList",
@@ -1064,23 +1254,25 @@
           "description": "Per-order cancel result."
         },
         {
-          "name": "-> orderId",
+          "name": "orderList[].orderId",
           "type": "Long",
           "description": "Cancelled order ID (if found)."
         },
         {
-          "name": "-> status",
+          "name": "orderList[].status",
           "type": "String",
           "description": "Final status, e.g. CANCELED ."
         },
         {
-          "name": "-> errorMsg",
+          "name": "orderList[].errorMsg",
           "type": "String",
           "description": "Error message when cancellation failed."
         }
       ],
-      "weight_ip": 5,
-      "weight_uid": 10
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "TRADE",
+      "weight_ip": 5
     },
     {
       "key": "spot.order.bulk_order",
@@ -1090,6 +1282,18 @@
       "path": "/api/v3/order/batch",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/BulkOrder",
       "requires_auth": true,
+      "request_transport": "body",
+      "query_fields": [],
+      "body_fields": [
+        "symbol",
+        "orderList",
+        "orderList[].side",
+        "orderList[].type",
+        "orderList[].timeInForce",
+        "orderList[].quantity",
+        "orderList[].price",
+        "orderList[].newClientOrderId"
+      ],
       "request_params": [
         {
           "name": "symbol",
@@ -1102,8 +1306,45 @@
           "type": "Array<Object>",
           "required": "Yes",
           "description": "Up to 10 order definitions."
+        },
+        {
+          "name": "orderList[].side",
+          "type": "String",
+          "required": "Yes",
+          "description": "BUY or SELL ."
+        },
+        {
+          "name": "orderList[].type",
+          "type": "String",
+          "required": "Yes",
+          "description": "LIMIT or MARKET ."
+        },
+        {
+          "name": "orderList[].timeInForce",
+          "type": "String",
+          "required": "Conditional",
+          "description": "Required when type = LIMIT . Values: GTC , IOC , FOK ."
+        },
+        {
+          "name": "orderList[].quantity",
+          "type": "String",
+          "required": "Yes",
+          "description": "Order quantity."
+        },
+        {
+          "name": "orderList[].price",
+          "type": "String",
+          "required": "Conditional",
+          "description": "Limit price when type = LIMIT ."
+        },
+        {
+          "name": "orderList[].newClientOrderId",
+          "type": "String",
+          "required": "No",
+          "description": "Client-defined order ID."
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "orderList",
@@ -1111,38 +1352,54 @@
           "description": "Per-order result list."
         },
         {
-          "name": "-> symbol",
+          "name": "orderList[].symbol",
           "type": "String",
           "description": "Trading pair."
         },
         {
-          "name": "-> orderId",
+          "name": "orderList[].orderId",
           "type": "Long",
           "description": "Created order ID (present when successful)."
         },
         {
-          "name": "-> clientOrderId",
+          "name": "orderList[].clientOrderId",
           "type": "String",
           "description": "Client-defined order ID."
         },
         {
-          "name": "-> transactTime",
+          "name": "orderList[].transactTime",
           "type": "Long",
           "description": "Order acceptance time (ms)."
         },
         {
-          "name": "-> errorCode",
+          "name": "orderList[].errorCode",
           "type": "String",
           "description": "Error code when the order failed."
         },
         {
-          "name": "-> errorMsg",
+          "name": "orderList[].errorMsg",
           "type": "String",
           "description": "Error message when the order failed."
         }
       ],
-      "weight_ip": 10,
-      "weight_uid": 50
+      "rate_limits": [
+        {
+          "header": "X-ORDER-COUNT-10S",
+          "limit": 5
+        },
+        {
+          "header": "X-ORDER-COUNT-1M",
+          "limit": 5
+        },
+        {
+          "header": "X-USED-WEIGHT-1M",
+          "limit": 0
+        }
+      ],
+      "constraints": [
+        "Each element of orderList supports the following fields:"
+      ],
+      "permission": "TRADE"
     },
     {
       "key": "spot.order.cancel_order",
@@ -1152,6 +1409,12 @@
       "path": "/api/v3/order",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/CancelOrder",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "orderId",
+        "origClientOrderId"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "orderId",
@@ -1166,6 +1429,7 @@
           "description": "Client order ID to cancel. Required when orderId is not supplied."
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "orderId",
@@ -1178,8 +1442,10 @@
           "description": "Final status (e.g. CANCELED )."
         }
       ],
-      "weight_ip": 1,
-      "weight_uid": 1
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "TRADE",
+      "weight_ip": 1
     },
     {
       "key": "spot.order.cancel_symbol_orders",
@@ -1189,6 +1455,11 @@
       "path": "/api/v3/openOrders",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/Cancel-Symbol-Orders",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -1197,6 +1468,7 @@
           "description": "Trading pair whose open orders should be cancelled."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
           "name": "orderId",
@@ -1209,8 +1481,10 @@
           "description": "Final order status."
         }
       ],
-      "weight_ip": 1,
-      "weight_uid": 1
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "TRADE",
+      "weight_ip": 5
     },
     {
       "key": "spot.order.history_orders",
@@ -1220,6 +1494,15 @@
       "path": "/api/v3/allOrders",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/HistoryOrders",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "startTime",
+        "endTime",
+        "limit",
+        "page"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -1252,6 +1535,7 @@
           "description": "Page index starting from 1 (default 1)."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
           "name": "symbol",
@@ -1324,8 +1608,10 @@
           "description": "Whether the order is active."
         }
       ],
-      "weight_ip": 10,
-      "weight_uid": 10
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "USER_DATA",
+      "weight_ip": 10
     },
     {
       "key": "spot.order.order_details",
@@ -1335,6 +1621,12 @@
       "path": "/api/v3/order",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/OrderDetails",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "orderId",
+        "origClientOrderId"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "orderId",
@@ -1349,6 +1641,7 @@
           "description": "Client order ID. Required when orderId is not supplied."
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "symbol",
@@ -1421,8 +1714,10 @@
           "description": "Whether the order is active."
         }
       ],
-      "weight_ip": 2,
-      "weight_uid": 2
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "USER_DATA",
+      "weight_ip": 2
     },
     {
       "key": "spot.order.place_order",
@@ -1432,6 +1727,17 @@
       "path": "/api/v3/order",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/PlaceOrder",
       "requires_auth": true,
+      "request_transport": "body",
+      "query_fields": [],
+      "body_fields": [
+        "symbol",
+        "side",
+        "type",
+        "timeInForce",
+        "quantity",
+        "price",
+        "newClientOrderId"
+      ],
       "request_params": [
         {
           "name": "symbol",
@@ -1476,6 +1782,7 @@
           "description": "Client-defined order ID (if omitted, the system assigns one). If an active order already uses the same newClientOrderId , the API returns success but does not create a duplicate order."
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "symbol",
@@ -1498,8 +1805,22 @@
           "description": "Order acceptance timestamp (ms)."
         }
       ],
-      "weight_ip": 2,
-      "weight_uid": 5
+      "rate_limits": [
+        {
+          "header": "X-ORDER-COUNT-10S",
+          "limit": 1
+        },
+        {
+          "header": "X-ORDER-COUNT-1M",
+          "limit": 1
+        },
+        {
+          "header": "X-USED-WEIGHT-1M",
+          "limit": 0
+        }
+      ],
+      "constraints": [],
+      "permission": "TRADE"
     },
     {
       "key": "spot.order.transaction_details",
@@ -1509,6 +1830,15 @@
       "path": "/api/v3/myTrades",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/TransactionDetails",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol",
+        "orderId",
+        "startTime",
+        "endTime",
+        "limit"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -1532,7 +1862,7 @@
           "name": "endTime",
           "type": "Long",
           "required": "No",
-          "description": "End time (ms). Must be â¥ startTime ."
+          "description": "End time (ms). Must be ≥ startTime ."
         },
         {
           "name": "limit",
@@ -1541,6 +1871,7 @@
           "description": "Page size (default 100)."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
           "name": "symbol",
@@ -1588,8 +1919,10 @@
           "description": "Whether the user was the buyer."
         }
       ],
-      "weight_ip": 5,
-      "weight_uid": 5
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "USER_DATA",
+      "weight_ip": 5
     },
     {
       "key": "spot.order.unfinished_orders",
@@ -1599,6 +1932,11 @@
       "path": "/api/v3/openOrders",
       "doc_url": "https://www.weex.com/api-doc/spot/orderApi/UnfinishedOrders",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "symbol"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "symbol",
@@ -1607,6 +1945,7 @@
           "description": "Filter by trading pair. If omitted, returns open orders for all symbols."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
           "name": "symbol",
@@ -1679,8 +2018,10 @@
           "description": "Whether the order is currently working."
         }
       ],
-      "weight_ip": 3,
-      "weight_uid": 3
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "USER_DATA",
+      "weight_ip": 3
     },
     {
       "key": "spot.rebate.get_affiliate_assets",
@@ -1688,8 +2029,15 @@
       "category": "rebate",
       "method": "GET",
       "path": "/api/v3/agency/getAssert",
-      "doc_url": "https://www.weex.com/api-doc/spot/rebate-endpoints/GetAffiliateAssets",
+      "doc_url": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateAssets",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "userId",
+        "startTime",
+        "endTime"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "userId",
@@ -1710,6 +2058,7 @@
           "description": "Optional end time (UTC, format yyyy-MM-dd , defaults to current if absent)"
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "availableBalance",
@@ -1742,8 +2091,9 @@
           "description": "Deposit records"
         }
       ],
-      "weight_ip": 20,
-      "weight_uid": 20
+      "rate_limits": [],
+      "constraints": [],
+      "weight_ip": 10
     },
     {
       "key": "spot.rebate.get_affiliate_commission",
@@ -1751,45 +2101,64 @@
       "category": "rebate",
       "method": "GET",
       "path": "/api/v3/rebate/affiliate/getAffiliateCommission",
-      "doc_url": "https://www.weex.com/api-doc/spot/rebate-endpoints/GetAffiliateCommission",
+      "doc_url": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateCommission",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "uid",
+        "startTime",
+        "endTime",
+        "coin",
+        "productType",
+        "page",
+        "pageSize"
+      ],
+      "body_fields": [],
       "request_params": [
         {
-          "name": "Long",
+          "name": "uid",
+          "type": "Long",
           "required": "No",
           "description": "Invited User UID"
         },
         {
-          "name": "Long",
+          "name": "startTime",
+          "type": "Long",
           "required": "No",
           "description": "Start timestamp in UTC (milliseconds). Default: 7 days ago,Max range: 3 months"
         },
         {
-          "name": "Long",
+          "name": "endTime",
+          "type": "Long",
           "required": "No",
           "description": "End timestamp in UTC (milliseconds). Default: current time,Max range: 3 months"
         },
         {
-          "name": "String",
+          "name": "coin",
+          "type": "String",
           "required": "No",
           "description": "USDT or BTC"
         },
         {
-          "name": "String",
+          "name": "productType",
+          "type": "String",
           "required": "No",
           "description": "SPOT or FUTURES (default SPOT)"
         },
         {
-          "name": "Integer",
+          "name": "page",
+          "type": "Integer",
           "required": "No",
           "description": "Page number (starting from 1, default 1)"
         },
         {
-          "name": "Integer",
+          "name": "pageSize",
+          "type": "Integer",
           "required": "No",
           "description": "Page size (default 100)"
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "channelCommissionInfoItems",
@@ -1867,8 +2236,9 @@
           "description": "Total records"
         }
       ],
-      "weight_ip": 20,
-      "weight_uid": 20
+      "rate_limits": [],
+      "constraints": [],
+      "weight_ip": 20
     },
     {
       "key": "spot.rebate.get_affiliate_deal_data",
@@ -1876,8 +2246,15 @@
       "category": "rebate",
       "method": "GET",
       "path": "/api/v3/agency/getDealData",
-      "doc_url": "https://www.weex.com/api-doc/spot/rebate-endpoints/GetAffiliateDealData",
+      "doc_url": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateDealData",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "userIds",
+        "startTime",
+        "endTime"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "userIds",
@@ -1898,6 +2275,7 @@
           "description": "Filter end date (UTC, format yyyy-MM-dd )"
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "data",
@@ -1935,8 +2313,9 @@
           "description": "End date applied by the upstream service ( yyyy-MM-dd )"
         }
       ],
-      "weight_ip": 20,
-      "weight_uid": 20
+      "rate_limits": [],
+      "constraints": [],
+      "weight_ip": 10
     },
     {
       "key": "spot.rebate.get_affiliate_ui_ds",
@@ -1944,35 +2323,50 @@
       "category": "rebate",
       "method": "GET",
       "path": "/api/v3/rebate/affiliate/getAffiliateUIDs",
-      "doc_url": "https://www.weex.com/api-doc/spot/rebate-endpoints/GetAffiliateUIDs",
+      "doc_url": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetAffiliateUIDs",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "uid",
+        "startTime",
+        "endTime",
+        "page",
+        "pageSize"
+      ],
+      "body_fields": [],
       "request_params": [
         {
-          "name": "Long",
+          "name": "uid",
+          "type": "Long",
           "required": "No",
           "description": "Invited User UID"
         },
         {
-          "name": "Long",
+          "name": "startTime",
+          "type": "Long",
           "required": "No",
           "description": "Start timestamp in UTC (milliseconds). Must fall within the past 1 year; defaults to 90 days prior to endTime when omitted."
         },
         {
-          "name": "Long",
+          "name": "endTime",
+          "type": "Long",
           "required": "No",
           "description": "End timestamp in UTC (milliseconds). Must be greater than startTime ; total range cannot exceed 90 days."
         },
         {
-          "name": "Integer",
+          "name": "page",
+          "type": "Integer",
           "required": "No",
           "description": "Page number (starting from 1, default 1)"
         },
         {
-          "name": "Integer",
+          "name": "pageSize",
+          "type": "Integer",
           "required": "No",
           "description": "Page size (default 100)"
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "uid",
@@ -2035,8 +2429,13 @@
           "description": "Total records"
         }
       ],
-      "weight_ip": 20,
-      "weight_uid": 20
+      "rate_limits": [],
+      "constraints": [
+        "End time must be later than the start time.",
+        "The query window cannot exceed 90 consecutive days.",
+        "The start time must be within the most recent 365 days; by default the system queries the last 90 days."
+      ],
+      "weight_ip": 20
     },
     {
       "key": "spot.rebate.get_channel_user_trade_and_asset",
@@ -2044,35 +2443,50 @@
       "category": "rebate",
       "method": "GET",
       "path": "/api/v3/rebate/affiliate/getChannelUserTradeAndAsset",
-      "doc_url": "https://www.weex.com/api-doc/spot/rebate-endpoints/GetChannelUserTradeAndAsset",
+      "doc_url": "https://www.weex.com/api-doc/partner/rebate-endpoints/GetChannelUserTradeAndAsset",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "uid",
+        "startTime",
+        "endTime",
+        "page",
+        "pageSize"
+      ],
+      "body_fields": [],
       "request_params": [
         {
-          "name": "Long",
+          "name": "uid",
+          "type": "Long",
           "required": "No",
           "description": "Invited User UID"
         },
         {
-          "name": "Long",
+          "name": "startTime",
+          "type": "Long",
           "required": "No",
           "description": "Start timestamp in UTC (milliseconds)"
         },
         {
-          "name": "Long",
+          "name": "endTime",
+          "type": "Long",
           "required": "No",
           "description": "End timestamp in UTC (milliseconds)"
         },
         {
-          "name": "Integer",
+          "name": "page",
+          "type": "Integer",
           "required": "No",
           "description": "Page number (starting from 1, default 1)"
         },
         {
-          "name": "Integer",
+          "name": "pageSize",
+          "type": "Integer",
           "required": "No",
           "description": "Page size (default 100)"
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "uid",
@@ -2125,8 +2539,13 @@
           "description": "Total records"
         }
       ],
-      "weight_ip": 20,
-      "weight_uid": 20
+      "rate_limits": [],
+      "constraints": [
+        "End time must be later than the start time.",
+        "The query window cannot exceed 90 consecutive days.",
+        "The start time must be within the most recent 365 days; by default the system queries the last 90 days."
+      ],
+      "weight_ip": 20
     },
     {
       "key": "spot.rebate.internal_withdrawal",
@@ -2134,38 +2553,60 @@
       "category": "rebate",
       "method": "POST",
       "path": "/api/v3/rebate/affiliate/internalWithdrawal",
-      "doc_url": "https://www.weex.com/api-doc/spot/rebate-endpoints/InternalWithdrawal",
+      "doc_url": "https://www.weex.com/api-doc/partner/rebate-endpoints/InternalWithdrawal",
       "requires_auth": true,
+      "request_transport": "body",
+      "query_fields": [],
+      "body_fields": [
+        "toUserId",
+        "coin",
+        "amount",
+        "fromAccountType",
+        "toAccountType"
+      ],
       "request_params": [
         {
-          "name": "Long",
+          "name": "toUserId",
+          "type": "Long",
           "required": "Yes",
           "description": "Transfer-in user ID"
         },
         {
-          "name": "String",
+          "name": "coin",
+          "type": "String",
           "required": "Yes",
           "description": "Currency type (USDT, BTC)"
         },
         {
-          "name": "String",
+          "name": "amount",
+          "type": "String",
           "required": "Yes",
           "description": "Transfer amount (Up to 6 decimal places)"
         },
         {
-          "name": "String",
+          "name": "fromAccountType",
+          "type": "String",
           "required": "No",
           "description": "Type of the originating account (SPOT: spot wallet, FUND: funding wallet, Default: SPOT)"
         },
         {
-          "name": "String",
+          "name": "toAccountType",
+          "type": "String",
           "required": "No",
           "description": "Type of the target account (SPOT: spot wallet, FUND: funding wallet, Default: SPOT)"
         }
       ],
-      "response_params": [],
-      "weight_ip": 100,
-      "weight_uid": 100
+      "response_container": "string",
+      "response_params": [
+        {
+          "name": "$",
+          "type": "String",
+          "description": "Returns the transfer ID as a string when the request succeeds."
+        }
+      ],
+      "rate_limits": [],
+      "constraints": [],
+      "weight_ip": 100
     },
     {
       "key": "spot.rebate.query_sub_channel_transactions",
@@ -2173,40 +2614,57 @@
       "category": "rebate",
       "method": "POST",
       "path": "/api/v3/rebate/affiliate/querySubChannelTransactions",
-      "doc_url": "https://www.weex.com/api-doc/spot/rebate-endpoints/QuerySubChannelTransactions",
+      "doc_url": "https://www.weex.com/api-doc/partner/rebate-endpoints/QuerySubChannelTransactions",
       "requires_auth": true,
+      "request_transport": "body",
+      "query_fields": [],
+      "body_fields": [
+        "subUid",
+        "startTime",
+        "endTime",
+        "productType",
+        "pageNum",
+        "pageSize"
+      ],
       "request_params": [
         {
-          "name": "Long",
+          "name": "subUid",
+          "type": "Long",
           "required": "No",
           "description": "Sub-affiliate's UID"
         },
         {
-          "name": "Long",
+          "name": "startTime",
+          "type": "Long",
           "required": "No",
           "description": "Start timestamp (UTC milliseconds)"
         },
         {
-          "name": "Long",
+          "name": "endTime",
+          "type": "Long",
           "required": "No",
           "description": "End timestamp (UTC milliseconds)"
         },
         {
-          "name": "String",
+          "name": "productType",
+          "type": "String",
           "required": "Yes",
           "description": "Product type (SPOT or FUTURES)"
         },
         {
-          "name": "Integer",
+          "name": "pageNum",
+          "type": "Integer",
           "required": "No",
           "description": "Page number (starts from 1, default 1)"
         },
         {
-          "name": "Integer",
+          "name": "pageSize",
+          "type": "Integer",
           "required": "No",
           "description": "Items per page (default 100)"
         }
       ],
+      "response_container": "object",
       "response_params": [
         {
           "name": "records",
@@ -2264,8 +2722,9 @@
           "description": "Total pages"
         }
       ],
-      "weight_ip": 10,
-      "weight_uid": 10
+      "rate_limits": [],
+      "constraints": [],
+      "weight_ip": 10
     },
     {
       "key": "spot.rebate.verify_referrals",
@@ -2273,8 +2732,13 @@
       "category": "rebate",
       "method": "GET",
       "path": "/api/v3/agency/verifyReferrals",
-      "doc_url": "https://www.weex.com/api-doc/spot/rebate-endpoints/VerifyReferrals",
+      "doc_url": "https://www.weex.com/api-doc/partner/rebate-endpoints/VerifyReferrals",
       "requires_auth": true,
+      "request_transport": "query",
+      "query_fields": [
+        "userIds"
+      ],
+      "body_fields": [],
       "request_params": [
         {
           "name": "userIds",
@@ -2283,6 +2747,7 @@
           "description": "Comma-separated UID list (for example 12345,67890 ). Supports up to 100 UIDs per call."
         }
       ],
+      "response_container": "array",
       "response_params": [
         {
           "name": "uid",
@@ -2295,8 +2760,116 @@
           "description": "true if the UID belongs to the current affiliate"
         }
       ],
-      "weight_ip": 20,
-      "weight_uid": 20
+      "rate_limits": [],
+      "constraints": [],
+      "weight_ip": 10
+    },
+    {
+      "key": "spot.tax.get_spot_account_record",
+      "title": "Spot Transaction Records (USER_DATA)",
+      "category": "tax",
+      "method": "POST",
+      "path": "/api/v3/tax/income",
+      "doc_url": "https://www.weex.com/api-doc/spot/tax/GetSpotAccountRecord",
+      "requires_auth": true,
+      "request_transport": "body",
+      "query_fields": [],
+      "body_fields": [
+        "coin",
+        "bizType",
+        "month",
+        "limit",
+        "page"
+      ],
+      "request_params": [
+        {
+          "name": "coin",
+          "type": "String",
+          "required": "No",
+          "description": "Filter by asset name (exact match). Example: USDT ."
+        },
+        {
+          "name": "bizType",
+          "type": "String",
+          "required": "No",
+          "description": "Filter by business type. Supported values: deposit , withdraw , trade_out , etc."
+        },
+        {
+          "name": "month",
+          "type": "String",
+          "required": "No",
+          "description": "Query month in YYYY-mm format, e.g., 2026-01 . Defaults to the current month if not provided."
+        },
+        {
+          "name": "limit",
+          "type": "Integer",
+          "required": "No",
+          "description": "Number of records per page. Default: 10 . Maximum: 200 ."
+        },
+        {
+          "name": "page",
+          "type": "Integer",
+          "required": "No",
+          "description": "Page number (starting from 1 ). Default: 1 ."
+        }
+      ],
+      "response_container": "array",
+      "response_params": [
+        {
+          "name": "billId",
+          "type": "String",
+          "description": "Bill identifier."
+        },
+        {
+          "name": "coinId",
+          "type": "Integer",
+          "description": "Asset ID."
+        },
+        {
+          "name": "coinName",
+          "type": "String",
+          "description": "Asset symbol."
+        },
+        {
+          "name": "bizType",
+          "type": "String",
+          "description": "Business type."
+        },
+        {
+          "name": "fillSize",
+          "type": "String",
+          "description": "Filled quantity (if applicable)."
+        },
+        {
+          "name": "fillValue",
+          "type": "String",
+          "description": "Filled value (if applicable)."
+        },
+        {
+          "name": "deltaAmount",
+          "type": "String",
+          "description": "Amount change."
+        },
+        {
+          "name": "afterAmount",
+          "type": "String",
+          "description": "Balance after the change."
+        },
+        {
+          "name": "fees",
+          "type": "String",
+          "description": "Fees charged."
+        },
+        {
+          "name": "cTime",
+          "type": "String",
+          "description": "Creation time (ms)."
+        }
+      ],
+      "rate_limits": [],
+      "constraints": [],
+      "permission": "USER_DATA",
+      "weight_ip": 5
     }
   ]
 }

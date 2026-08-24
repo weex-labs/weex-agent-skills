@@ -196,6 +196,23 @@
       }
     },
     {
+      "id": "reject_invalid_commission_coin",
+      "language": "zh",
+      "prompt": "查 UID 10001 的 ETH 返佣记录",
+      "context": {
+        "saved_profile": "partner-profile",
+        "uid": "10001",
+        "filters": {
+          "coin": "ETH"
+        }
+      },
+      "expected": {
+        "disposition": "reject",
+        "reason": "invalid_coin",
+        "partner_rest_request_sent": false
+      }
+    },
+    {
       "id": "delegate_order_to_trader",
       "language": "zh",
       "prompt": "用合伙人账户给我下单",

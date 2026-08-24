@@ -45,9 +45,15 @@ Notes:
 - `constraints`: explicit limits such as `spot_symbol_required`
 - `partial`: whether the aggregation layer could not prove the dataset is complete for the requested window
 - `degraded_reasons`: machine-readable reasons such as `spot_kline_window_unbounded`, `futures_fills_limit_hit`, `spot_tp_sl_state_unavailable`, `spot_history_skipped_without_symbol`, or `demo_futures_fills_unavailable`
+- Futures bill pagination reads the next request cursor from `nextKey.nextKeyId` and `nextKey.nextKeyTime`. A repeated cursor produces `futures_bills_cursor_stalled`; an unusable cursor that cannot be recovered by splitting the time window produces `futures_bills_window_truncated`. Either condition sets `partial=true` so callers do not present incomplete bills as complete coverage.
+- Futures historical pending orders use the official time-range request only; the aggregator does not send an undocumented `page` parameter. When the endpoint reaches its result limit, the requested range is recursively split. If the limit is still reached at the minimum split window, the collector returns the available records with `partial=true` and `futures_historical_pending_orders_window_truncated` in `degraded_reasons` instead of claiming complete coverage.
+- Spot bill collection treats the requested `start_ms` / `end_ms` as an inclusive range. Because the official endpoint defines `after` and `before` as strict bounds, each internal window `[start, end]` is sent as `after=start-1` (omitted when `start=0`) and `before=end+1`; recursively split child windows therefore have no boundary gaps.
 - `balances[*].account_scope`, `positions[*].account_scope`, `orders[*].account_scope`, `fills[*].account_scope`, and `bills[*].account_scope` default to `personal_futures` or `personal_spot`; simulated futures rows use `sim_futures`
 - `positions[*].margin_type` is normalized from upstream `marginType` when available
 - `positions[*].position_mode` is normalized from `positionMode` / `separatedMode`; `ONE_WAY` maps to `COMBINED`, `HEDGE` maps to `SEPARATED`
+- Futures `positions[*].open_value` preserves official `openValue` (value at position opening), and `entry_price` is derived as `open_value / abs(quantity)` when possible. `open_value` is never used directly as current `notional`.
+- Futures `positions[*].notional` and `mark_price` represent current position value and current price. They come from explicit current fields, a fresh market price, or—when side and unrealized PnL are available—the linear position relation `open_value + unrealized_pnl` for long positions and `open_value - unrealized_pnl` for short positions. If current value cannot be established, these fields remain `null` and risk analysis degrades instead of substituting the entry price.
+- Futures `positions[*].margin_size` and `positions[*].liquidation_price` preserve official `marginSize` and `liquidatePrice`; liquidation price `0` remains a returned value and means the exchange currently reports no liquidation price because risk is low.
 - `orders[*].margin_type`, `orders[*].position_mode`, `fills[*].margin_type`, and `fills[*].position_mode` are best-effort fields in Phase 1: they are preserved when upstream context already includes them, otherwise they remain `null`
 - `market=all` without `symbol` runs in degraded mode in Phase 1: futures history is still collected, while spot symbol-specific history is skipped, `partial=true`, and the skip is surfaced through `constraints` plus `spot_history_skipped_without_symbol`
 
@@ -64,7 +70,13 @@ Notes:
   "margin_type": "CROSSED",
   "position_mode": "COMBINED",
   "quantity": 0.01,
+  "open_value": 620.0,
+  "entry_price": 62000.0,
+  "mark_price": 65000.0,
   "notional": 650.0,
+  "unrealized_pnl": 30.0,
+  "margin_size": 62.0,
+  "liquidation_price": 54000.0,
   "leverage": 10.0,
   "created_time": 1710000000000,
   "updated_time": 1710003600000
@@ -185,6 +197,8 @@ Notes:
 `trading_mode=demo` is supported only with `market=futures`. The trader skill routes demo balance, all-position, order-history, and order-placement calls to the official `sim.*` contract endpoints. It does not use live futures endpoints to fill missing demo data.
 
 Convenience order and guard flows accept normal contract symbols such as `BTCUSDT` and convert them to the official simulated-order symbol shape before submitting `sim.transaction.place_order`. Normalized rows convert simulated endpoint symbols back to the normal contract symbol shape so `positions[*].symbol`, `orders[*].symbol`, monitor matching, and downstream analysis consistently use symbols such as `BTCUSDT`.
+
+For `sim.transaction.get_order_history`, a normal display symbol such as `BTCUSDT` is not sent as an upstream filter because the demo history API can reject it. The aggregator omits that upstream filter, paginates the returned demo history, then filters locally after normalizing official simulated symbols such as `BTCSUSDT` back to `BTCUSDT`. If the caller explicitly supplies an official simulated symbol, it remains eligible for upstream filtering.
 
 Expected demo degraded reasons include:
 

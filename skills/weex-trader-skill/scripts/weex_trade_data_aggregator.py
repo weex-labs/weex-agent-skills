@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -764,25 +765,119 @@ def _normalize_positions(
     rows = _extract_rows(payload, "positions", "items")
     if not rows and isinstance(payload, list):
         rows = [item for item in payload if isinstance(item, dict)]
-    return [
-        {
-            "account_scope": _normalize_account_scope(market, row, trading_mode=trading_mode),
-            "market": market,
-            "symbol": _normalize_symbol_for_trading_mode(_pick(row, "symbol", "instId"), trading_mode),
-            "side": str(_pick(row, "side", "positionSide") or "unknown").lower(),
-            "margin_type": _normalize_margin_type(_pick(row, "marginType", "margin_type")),
-            "position_mode": _normalize_position_mode(
-                _pick(row, "positionMode", "position_mode", "separatedMode")
-            ),
-            "quantity": _to_float(_pick(row, "size", "quantity", "qty")),
-            "notional": _to_float(_pick(row, "openValue", "value", "notional")),
-            "unrealized_pnl": _to_float(_pick(row, "unrealizePnl", "unrealizedPnl", "unrealized_pnl")),
-            "leverage": _to_float(_pick(row, "leverage")),
-            "created_time": int(_pick(row, "createdTime", "time") or 0),
-            "updated_time": int(_pick(row, "updatedTime", "updateTime") or 0),
-        }
-        for row in rows
-    ]
+    normalized_rows: list[dict[str, Any]] = []
+    for row in rows:
+        quantity = _to_float(_pick(row, "size", "quantity", "qty"))
+        side = str(_pick(row, "side", "positionSide") or "unknown").lower()
+        position_id = _pick(row, "positionId", "position_id", "id")
+        separated_open_order_id = _pick(
+            row,
+            "separatedOpenOrderId",
+            "separated_open_order_id",
+        )
+        open_value = _to_float(_pick(row, "openValue", "open_value"))
+        unrealized_pnl = _to_float(
+            _pick(row, "unrealizePnl", "unrealizedPnl", "unrealized_pnl")
+        )
+        mark_price = _to_float(
+            _pick(
+                row,
+                "markPrice",
+                "mark_price",
+                "currentPrice",
+                "current_price",
+                "lastPrice",
+                "last_price",
+            )
+        )
+        notional = _to_float(
+            _pick(
+                row,
+                "notional",
+                "positionValue",
+                "position_value",
+                "markValue",
+                "mark_value",
+                "currentValue",
+                "current_value",
+                "value",
+            )
+        )
+        absolute_quantity = abs(quantity) if quantity is not None else None
+        entry_price = None
+        if (
+            open_value is not None
+            and absolute_quantity is not None
+            and absolute_quantity > POSITION_EPSILON
+        ):
+            entry_price = abs(open_value) / absolute_quantity
+        if notional is not None:
+            notional = abs(notional)
+        elif mark_price is not None and absolute_quantity is not None:
+            notional = absolute_quantity * abs(mark_price)
+        elif open_value is not None and unrealized_pnl is not None:
+            if side in {"long", "buy"}:
+                candidate_notional = abs(open_value) + unrealized_pnl
+            elif side in {"short", "sell"}:
+                candidate_notional = abs(open_value) - unrealized_pnl
+            else:
+                candidate_notional = None
+            if candidate_notional is not None and candidate_notional >= 0.0:
+                notional = candidate_notional
+        if mark_price is not None:
+            mark_price = abs(mark_price)
+        elif (
+            notional is not None
+            and absolute_quantity is not None
+            and absolute_quantity > POSITION_EPSILON
+        ):
+            mark_price = notional / absolute_quantity
+
+        normalized_rows.append(
+            {
+                "account_scope": _normalize_account_scope(
+                    market,
+                    row,
+                    trading_mode=trading_mode,
+                ),
+                "market": market,
+                "symbol": _normalize_symbol_for_trading_mode(
+                    _pick(row, "symbol", "instId"),
+                    trading_mode,
+                ),
+                "position_id": None if position_id in (None, "") else str(position_id),
+                "separated_open_order_id": (
+                    None
+                    if separated_open_order_id in (None, "")
+                    else str(separated_open_order_id)
+                ),
+                "side": side,
+                "margin_type": _normalize_margin_type(_pick(row, "marginType", "margin_type")),
+                "position_mode": _normalize_position_mode(
+                    _pick(row, "positionMode", "position_mode", "separatedMode")
+                ),
+                "quantity": quantity,
+                "open_value": open_value,
+                "entry_price": entry_price,
+                "mark_price": mark_price,
+                "notional": notional,
+                "unrealized_pnl": unrealized_pnl,
+                "margin_size": _to_float(_pick(row, "marginSize", "margin_size")),
+                "liquidation_price": _to_float(
+                    _pick(
+                        row,
+                        "liquidatePrice",
+                        "liquidationPrice",
+                        "liquidation_price",
+                        "liqPrice",
+                    )
+                ),
+                "leverage": _to_float(_pick(row, "leverage")),
+                "created_time": int(_pick(row, "createdTime", "time") or 0),
+                "updated_time": int(_pick(row, "updatedTime", "updateTime") or 0),
+            }
+        )
+    return normalized_rows
 
 
 def _normalize_orders(
@@ -950,7 +1045,7 @@ def _extract_latest_price(payload: Any) -> float | None:
 
     for candidate in candidates:
         price = _to_float(_pick(candidate, "lastPrice", "price", "markPrice", "close"))
-        if price is not None:
+        if price is not None and math.isfinite(price) and price > 0:
             return price
     return None
 
@@ -1094,13 +1189,36 @@ def _build_spot_account_estimates(
         )
 
     quote_asset = _infer_spot_quote_asset(symbol, balances)
+    base_asset = None
+    base_available_quantity = None
     quote_available_balance = None
+    quote_available_balance_u = None
     if quote_asset:
-        quote_row = next((row for row in balances if str(row.get("asset") or "").upper() == quote_asset), None)
+        normalized_symbol = str(symbol or "").strip().upper()
+        base_asset = normalized_symbol[: -len(quote_asset)] or None
+        base_row = next(
+            (
+                row
+                for row in balances
+                if str(row.get("asset") or "").strip().upper() == base_asset
+            ),
+            None,
+        )
+        if base_row is not None:
+            base_available_quantity = _to_float(base_row.get("available_balance"))
+        quote_row = next(
+            (
+                row
+                for row in balances
+                if str(row.get("asset") or "").strip().upper() == quote_asset
+            ),
+            None,
+        )
         if quote_row is not None:
-            quote_available_balance = _extract_spot_balance_value_usdt(
+            quote_available_balance = _to_float(quote_row.get("available_balance"))
+            quote_available_balance_u = _extract_spot_balance_value_usdt(
                 asset=quote_asset,
-                amount=_to_float(quote_row.get("available_balance")),
+                amount=quote_available_balance,
                 fetch_price=cached_fetch_spot_latest_price,
                 degraded_reasons=degraded_reasons,
             )
@@ -1110,10 +1228,15 @@ def _build_spot_account_estimates(
         {
             "equity": equity_total if saw_equity_component else None,
             "available_balance": (
-                quote_available_balance
-                if quote_available_balance is not None
+                quote_available_balance_u
+                if quote_asset is not None
                 else (available_equity_total if saw_available_component else None)
             ),
+            "base_asset": base_asset,
+            "base_available_quantity": base_available_quantity,
+            "quote_asset": quote_asset,
+            "quote_available_balance": quote_available_balance,
+            "quote_available_balance_u": quote_available_balance_u,
         },
         positions,
     )
@@ -1147,12 +1270,35 @@ def _estimate_futures_position_price(
     for row in positions:
         if str(row.get("symbol") or "").strip().upper() != normalized_symbol:
             continue
+        mark_price = abs(_to_float(row.get("mark_price")) or 0.0)
+        if mark_price > 0.0:
+            return mark_price
         quantity = abs(_to_float(row.get("quantity")) or 0.0)
         notional = abs(_to_float(row.get("notional")) or 0.0)
         if quantity <= POSITION_EPSILON or notional <= 0.0:
             continue
         return notional / quantity
     return None
+
+
+def _apply_futures_position_price(
+    *,
+    positions: list[dict[str, Any]],
+    symbol: str | None,
+    current_price: float | None,
+) -> None:
+    normalized_symbol = str(symbol or "").strip().upper()
+    price = abs(_to_float(current_price) or 0.0)
+    if not normalized_symbol or price <= 0.0:
+        return
+    for row in positions:
+        if str(row.get("symbol") or "").strip().upper() != normalized_symbol:
+            continue
+        quantity = abs(_to_float(row.get("quantity")) or 0.0)
+        if quantity <= POSITION_EPSILON:
+            continue
+        row["mark_price"] = price
+        row["notional"] = quantity * price
 
 
 def _mark_market_snapshot_estimated(
@@ -1177,7 +1323,11 @@ def _pick_primary_futures_symbol(
     if positions:
         primary_position = max(
             positions,
-            key=lambda row: abs(_to_float(row.get("notional")) or 0.0),
+            key=lambda row: abs(
+                _to_float(row.get("notional"))
+                or _to_float(row.get("open_value"))
+                or 0.0
+            ),
         )
         symbol = str(primary_position.get("symbol") or "").strip().upper()
         if symbol:
@@ -1575,7 +1725,10 @@ class TradeDataAggregator:
                 _merge_degraded_reasons(degraded_reasons, list(meta.get("degraded_reasons") or []))
                 _merge_constraints(constraints, list(meta.get("constraints") or []))
             try:
-                spot_kline_payload = self.fetcher.fetch_spot_klines(symbol=normalized_symbol)
+                spot_kline_payload = self.fetcher.fetch_spot_klines(
+                    profile_name=profile_name,
+                    symbol=normalized_symbol,
+                )
             except AggregationInputError as exc:
                 if _should_degrade_spot_kline_error(exc):
                     partial = True
@@ -1791,6 +1944,14 @@ class TradeDataAggregator:
                             market="futures",
                             reason="futures_market_snapshot_estimated_from_position",
                         )
+                if current_price is None:
+                    partial = True
+                else:
+                    _apply_futures_position_price(
+                        positions=positions,
+                        symbol=symbol,
+                        current_price=current_price,
+                    )
         else:
             balances, spot_balance_partial = self._collect_spot_balances(
                 profile_name=profile_name,
@@ -1808,11 +1969,17 @@ class TradeDataAggregator:
             partial = partial or recent_orders_partial
             if symbol:
                 current_price = _safe_current_price(
-                    fetch_latest_price=lambda: self.fetcher.fetch_spot_latest_price(symbol=symbol),
+                    fetch_latest_price=lambda: self.fetcher.fetch_spot_latest_price(
+                        profile_name=profile_name,
+                        symbol=symbol,
+                    ),
                     market="spot",
                     symbol=symbol,
                     degraded_reasons=degraded_reasons,
-                    fetch_klines=lambda: self.fetcher.fetch_spot_klines(symbol=symbol),
+                    fetch_klines=lambda: self.fetcher.fetch_spot_klines(
+                        profile_name=profile_name,
+                        symbol=symbol,
+                    ),
                 )
             open_orders = _normalize_orders(
                 self.fetcher.fetch_spot_open_orders(
@@ -1830,7 +1997,10 @@ class TradeDataAggregator:
             account_snapshot, positions = _build_spot_account_estimates(
                 balances=balances,
                 symbol=symbol,
-                fetch_spot_latest_price=self.fetcher.fetch_spot_latest_price,
+                fetch_spot_latest_price=lambda *, symbol: self.fetcher.fetch_spot_latest_price(
+                    profile_name=profile_name,
+                    symbol=symbol,
+                ),
                 degraded_reasons=degraded_reasons,
             )
         else:
@@ -1983,6 +2153,14 @@ class TradeDataAggregator:
                             market="futures",
                             reason="futures_market_snapshot_estimated_from_position",
                         )
+                if current_price is None:
+                    partial = True
+                else:
+                    _apply_futures_position_price(
+                        positions=positions,
+                        symbol=market_snapshot_symbol,
+                        current_price=current_price,
+                    )
         else:
             balances, spot_balance_partial = self._collect_spot_balances(
                 profile_name=profile_name,
@@ -2008,11 +2186,17 @@ class TradeDataAggregator:
             )
             if normalized_symbol:
                 current_price = _safe_current_price(
-                    fetch_latest_price=lambda: self.fetcher.fetch_spot_latest_price(symbol=normalized_symbol),
+                    fetch_latest_price=lambda: self.fetcher.fetch_spot_latest_price(
+                        profile_name=profile_name,
+                        symbol=normalized_symbol,
+                    ),
                     market="spot",
                     symbol=normalized_symbol,
                     degraded_reasons=degraded_reasons,
-                    fetch_klines=lambda: self.fetcher.fetch_spot_klines(symbol=normalized_symbol),
+                    fetch_klines=lambda: self.fetcher.fetch_spot_klines(
+                        profile_name=profile_name,
+                        symbol=normalized_symbol,
+                    ),
                 )
             _merge_degraded_reasons(degraded_reasons, ["spot_tp_sl_state_unavailable"])
 
@@ -2023,7 +2207,10 @@ class TradeDataAggregator:
             account_snapshot, positions = _build_spot_account_estimates(
                 balances=balances,
                 symbol=normalized_symbol,
-                fetch_spot_latest_price=self.fetcher.fetch_spot_latest_price,
+                fetch_spot_latest_price=lambda *, symbol: self.fetcher.fetch_spot_latest_price(
+                    profile_name=profile_name,
+                    symbol=symbol,
+                ),
                 degraded_reasons=degraded_reasons,
             )
         else:
@@ -2148,11 +2335,19 @@ class WeexApiFetcher:
         )
         return spot_api, client
 
-    def _build_public_spot_client(self) -> tuple[Any, Any]:
+    def _build_public_spot_client(self, profile_name: str = "") -> tuple[Any, Any]:
         spot_api = self._spot_module()
         spot_api.refresh_agent_records(command="trade-aggregator.spot.public")
+        profile = spot_api.resolve_runtime_profile(
+            requested_profile=profile_name,
+            allow_invalid_default=False,
+        )
         env_base_url = os.getenv("WEEX_SPOT_API_BASE") or os.getenv("WEEX_API_BASE")
-        base_url = env_base_url or spot_api.DEFAULT_BASE_URL
+        base_url = (
+            (profile.spot_base_url if profile else "")
+            or env_base_url
+            or spot_api.DEFAULT_BASE_URL
+        )
         locale = os.getenv("WEEX_LOCALE") or spot_api.DEFAULT_LOCALE
         timeout = float(os.getenv("WEEX_API_TIMEOUT", spot_api.DEFAULT_TIMEOUT))
         client = spot_api.WeexSpotClient(
@@ -2200,7 +2395,7 @@ class WeexApiFetcher:
         public: bool = False,
     ) -> Any:
         if public:
-            spot_api, client = self._build_public_spot_client()
+            spot_api, client = self._build_public_spot_client(profile_name)
         else:
             spot_api, client = self._build_spot_client(profile_name)
         endpoint = spot_api.ENDPOINTS[endpoint_key]
@@ -2274,6 +2469,12 @@ class WeexApiFetcher:
     ) -> Any:
         mode = _normalize_trading_mode(trading_mode)
         endpoint_key = "sim.transaction.get_order_history" if mode == "demo" else "transaction.get_order_history"
+        normalized_symbol = str(symbol or "").strip().upper() or None
+        upstream_symbol = normalized_symbol
+        local_demo_symbol = None
+        if mode == "demo" and normalized_symbol and not normalized_symbol.endswith("SUSDT"):
+            upstream_symbol = None
+            local_demo_symbol = normalized_symbol
         rows: list[dict[str, Any]] = []
         for window in split_time_range(start_ms, end_ms, max_span_days=MAX_FUTURES_WINDOW_DAYS):
             page = 0
@@ -2284,8 +2485,8 @@ class WeexApiFetcher:
                     "limit": FUTURES_ORDER_LIMIT,
                     "page": page,
                 }
-                if symbol:
-                    query["symbol"] = symbol
+                if upstream_symbol:
+                    query["symbol"] = upstream_symbol
                 kwargs: dict[str, Any] = {
                     "profile_name": profile_name,
                     "endpoint_key": endpoint_key,
@@ -2305,6 +2506,13 @@ class WeexApiFetcher:
                 if len(page_rows) < FUTURES_ORDER_LIMIT:
                     break
                 page += 1
+        if local_demo_symbol:
+            rows = [
+                row
+                for row in rows
+                if _normalize_demo_symbol_for_display(_pick(row, "symbol", "instId"))
+                == local_demo_symbol
+            ]
         return rows
 
     def fetch_futures_fills(
@@ -2357,35 +2565,50 @@ class WeexApiFetcher:
         symbol: str | None,
     ) -> Any:
         rows: list[dict[str, Any]] = []
+        degraded_reasons: list[str] = []
+        partial = False
+
+        def collect_window(window_start: int, window_end: int) -> None:
+            nonlocal partial
+            query: dict[str, Any] = {
+                "startTime": window_start,
+                "endTime": window_end,
+                "limit": FUTURES_ORDER_LIMIT,
+            }
+            if symbol:
+                query["symbol"] = symbol
+            payload = self._send_contract_request(
+                profile_name=profile_name,
+                endpoint_key="transaction.get_historical_pending_orders",
+                query=query,
+            )
+            page_rows = _extract_list_payload(payload, "items", "orders")
+            _extend_unique_dict_rows(
+                rows,
+                page_rows,
+                identity_keys=("algoId", "actualOrderId", "createTime", "symbol"),
+            )
+            has_more = bool((payload or {}).get("hasMore")) if isinstance(payload, dict) else False
+            if not has_more:
+                return
+            if (window_end - window_start) > MIN_SPLIT_WINDOW_MS:
+                midpoint = window_start + ((window_end - window_start) // 2)
+                collect_window(window_start, midpoint)
+                collect_window(midpoint + 1, window_end)
+                return
+            partial = True
+            _merge_degraded_reasons(
+                degraded_reasons,
+                ["futures_historical_pending_orders_window_truncated"],
+            )
+
         for window in split_time_range(start_ms, end_ms, max_span_days=MAX_FUTURES_WINDOW_DAYS):
-            page = 1
-            while True:
-                query: dict[str, Any] = {
-                    "startTime": window.start_ms,
-                    "endTime": window.end_ms,
-                    "limit": FUTURES_ORDER_LIMIT,
-                    "page": page,
-                }
-                if symbol:
-                    query["symbol"] = symbol
-                payload = self._send_contract_request(
-                    profile_name=profile_name,
-                    endpoint_key="transaction.get_historical_pending_orders",
-                    query=query,
-                )
-                page_rows = _extract_list_payload(payload, "items", "orders")
-                if not page_rows:
-                    break
-                _extend_unique_dict_rows(
-                    rows,
-                    page_rows,
-                    identity_keys=("algoId", "actualOrderId", "createTime", "symbol"),
-                )
-                has_more = bool((payload or {}).get("hasMore")) if isinstance(payload, dict) else False
-                if not has_more:
-                    break
-                page += 1
-        return rows
+            collect_window(window.start_ms, window.end_ms)
+        return self._build_meta_payload(
+            rows,
+            partial=partial,
+            degraded_reasons=degraded_reasons,
+        )
 
     def fetch_futures_bills(
         self,
@@ -2408,23 +2631,46 @@ class WeexApiFetcher:
             }
             if symbol:
                 body["symbol"] = symbol
-            payload = self._send_contract_request(
-                profile_name=profile_name,
-                endpoint_key="account.get_contract_bills",
-                query={},
-                body=body,
-            )
-            page_rows = _extract_list_payload(payload, "items", "bills")
-            has_next = bool((payload or {}).get("hasNextPage")) if isinstance(payload, dict) else False
-            if has_next and (window_end - window_start) > MIN_SPLIT_WINDOW_MS:
-                midpoint = window_start + ((window_end - window_start) // 2)
-                collect_window(window_start, midpoint)
-                collect_window(midpoint + 1, window_end)
-                return
-            if has_next:
+            seen_cursors: set[tuple[str, str]] = set()
+            while True:
+                payload = self._send_contract_request(
+                    profile_name=profile_name,
+                    endpoint_key="account.get_contract_bills",
+                    query={},
+                    body=body,
+                )
+                page_rows = _extract_list_payload(payload, "items", "bills")
+                _extend_unique_dict_rows(
+                    rows,
+                    page_rows,
+                    identity_keys=("billId", "time", "symbol", "incomeType"),
+                )
+                has_next = bool((payload or {}).get("hasNextPage")) if isinstance(payload, dict) else False
+                if not has_next:
+                    return
+
+                next_key = payload.get("nextKey") if isinstance(payload, dict) else None
+                next_key_id = next_key.get("nextKeyId") if isinstance(next_key, dict) else None
+                next_key_time = next_key.get("nextKeyTime") if isinstance(next_key, dict) else None
+                if next_key_id is not None and next_key_time is not None:
+                    cursor = (str(next_key_id), str(next_key_time))
+                    if cursor in seen_cursors:
+                        partial = True
+                        _merge_degraded_reasons(degraded_reasons, ["futures_bills_cursor_stalled"])
+                        return
+                    seen_cursors.add(cursor)
+                    body["nextKeyId"] = next_key_id
+                    body["nextKeyTime"] = next_key_time
+                    continue
+
+                if (window_end - window_start) > MIN_SPLIT_WINDOW_MS:
+                    midpoint = window_start + ((window_end - window_start) // 2)
+                    collect_window(window_start, midpoint)
+                    collect_window(midpoint + 1, window_end)
+                    return
                 partial = True
                 _merge_degraded_reasons(degraded_reasons, ["futures_bills_window_truncated"])
-            _extend_unique_dict_rows(rows, page_rows, identity_keys=("billId", "time", "symbol", "incomeType"))
+                return
 
         for window in split_time_range(start_ms, end_ms, max_span_days=MAX_BILLS_WINDOW_DAYS):
             collect_window(window.start_ms, window.end_ms)
@@ -2467,9 +2713,9 @@ class WeexApiFetcher:
             query={},
         )
 
-    def fetch_spot_latest_price(self, *, symbol: str) -> Any:
+    def fetch_spot_latest_price(self, *, profile_name: str = "", symbol: str) -> Any:
         return self._send_spot_request(
-            profile_name="",
+            profile_name=profile_name,
             endpoint_key="spot.market.get_ticker_info",
             query={"symbol": symbol},
             public=True,
@@ -2572,15 +2818,17 @@ class WeexApiFetcher:
 
         def collect_window(window_start: int, window_end: int) -> None:
             nonlocal partial
+            body: dict[str, Any] = {
+                "before": window_end + 1,
+                "limit": SPOT_BILL_LIMIT,
+            }
+            if window_start > 0:
+                body["after"] = window_start - 1
             payload = self._send_spot_request(
                 profile_name=profile_name,
                 endpoint_key="spot.account.get_bill_records",
                 query={},
-                body={
-                    "after": window_start,
-                    "before": window_end,
-                    "limit": SPOT_BILL_LIMIT,
-                },
+                body=body,
             )
             page_rows = _extract_list_payload(payload, "items", "bills")
             if len(page_rows) >= SPOT_BILL_LIMIT and (window_end - window_start) > MIN_SPLIT_WINDOW_MS:
@@ -2600,10 +2848,11 @@ class WeexApiFetcher:
     def fetch_spot_klines(
         self,
         *,
+        profile_name: str = "",
         symbol: str,
     ) -> Any:
         return self._send_spot_request(
-            profile_name="",
+            profile_name=profile_name,
             endpoint_key="spot.market.get_k_line_data",
             query={
                 "symbol": symbol,

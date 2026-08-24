@@ -1,11 +1,10 @@
 ---
-compatibility: Requires Python with requirements.lock installed, network access for WEEX REST calls, and Tk through an explicitly prepared managed GUI runtime for Windows/macOS GUI profile and vault flows.
 description: Use when the user wants WEEX REST automation for contract or spot trading, market or account queries, or secure saved-profile setup and management.
-metadata:
-    local-path: /var/folders/25/vzbzcnfx6jx58c7c00nckb8r0000gn/T/weex-local-skills-qhr5kqcc/repo/skills/weex-trader-skill
 name: weex-trader-skill
 ---
 # WEEX Trader Skill
+
+Compatibility requires Python with `requirements.lock` installed, network access for WEEX REST calls, and Tk through an explicitly prepared managed GUI runtime for Windows/macOS GUI profile and vault flows.
 
 Read `manifest.json` for routing rules. Open `file-index.json` only for file-level guidance.
 For every turn that uses this skill, before routing or UI launch, AI must refresh preflight state. For Partner-only turns with a selected saved profile, run `scripts/weex_partner_api.py preflight --profile <saved-profile> --language <zh|en> --pretty`; it refreshes `agent-init.json` and `agent-runtime.json` while projecting only Partner-safe fields to the tool transcript. For other turns, run `scripts/weex_agent_state.py --command skill.preflight --language <zh|en> --pretty`.
@@ -19,6 +18,10 @@ On Windows and macOS, GUI profile and vault flows must use the managed GUI runti
 - `scripts/weex_partner_api.py`: strict read-only Partner REST executor for the seven allowlisted Partner endpoints
 - `scripts/weex_trade_data_aggregator.py`: normalize live/history into replay, profile, order-risk, and account-risk payloads
 - `scripts/weex_trade_guard.py`: preview order risk, preview TP/SL conditional order risk, scan account risk, persist pending intents, and require explicit confirmation before live orders
+- `scripts/weex_auto_trade.py`: saved-profile-only JSON facade for strategy registration, authorization requests/grants/revocation, order reconciliation, and event inspection
+- `scripts/weex_auto_trade_state.py`: owner-only six-table SQLite authorization, quota, usage, order, event, and migration state kernel
+- `scripts/weex_auto_trade_amount.py`: deterministic conservative official-fact valuation for Spot and Futures authorization quota checks
+- `scripts/weex_auto_trade_notify.py`: one-shot local notification adapter for claimed authorization events; notification failure never changes trade state
 - `scripts/weex_trade_risk_review.py`: local risk review helpers for standalone trade-guard preview/account-scan flows
 - `scripts/weex_order_intent_state.py`: store and validate pending order intents
 - `scripts/weex_gui_launcher.py`: detached launcher for GUI profile/vault entrypoints on macOS and Windows; vault launches accept `--requested-action setup|unlock|status|lock`
@@ -26,6 +29,7 @@ On Windows and macOS, GUI profile and vault flows must use the managed GUI runti
 - `scripts/weex_profiles_zh.py` / `scripts/weex_profiles_en.py`: terminal profile manager
 - `scripts/weex_linux_profile_wizard_zh.sh` / `scripts/weex_linux_profile_wizard_en.sh`: guided Linux onboarding
 - `scripts/weex_vault_zh.py` / `scripts/weex_vault_en.py`: cross-platform application vault setup, status, unlock, lock, and mode
+- `scripts/update_openclaw_skills.sh`: maintain the official OpenClaw Git checkout at an approved pinned commit, expose all four WEEX skills through `~/.openclaw/skills` symlinks, and run OpenClaw eligibility checks with rollback on failure
 
 Compatibility wrappers:
 
@@ -43,8 +47,10 @@ These auto-detect language from `agent-init.json`.
 - Partner queries: accept only structured requests from `weex-partner-skill` and execute them with `scripts/weex_partner_api.py`; profile resolution, Vault credentials, signing, exact-host enforcement, and HTTPS remain owned by this skill
 - Replay, profile, or order-risk inputs for the analysis skill: collect live data with `scripts/weex_trade_data_aggregator.py`, then pass the normalized JSON into `weex-analysis-skill`
 - Order preview, TP/SL preview, account-risk scan, and confirmation flows: use `scripts/weex_trade_guard.py`
+- Automatic strategy authorization and authorized-order guard flows: use `scripts/weex_auto_trade.py` for the stable JSON facade, including `submit-auto`, recovery, events, snapshots, and reconciliation; strategies call the CLI as a subprocess and never import `scripts/weex_auto_trade_state.py` or inject production collaborators
 - Windows/macOS setup or editing: prefer the visual profile manager
 - Linux interactive setup: prefer the Linux wizard
+- OpenClaw installation or update: use `scripts/update_openclaw_skills.sh`; do not use the obsolete native installer flags
 - Open `README.md` for the broad usage/install summary
 - Open `references/profile-manager.md`, `references/profile-onboarding.md`, `references/linux-vault.md`, `references/auth-and-signing.md`, `references/script-operations.md`, `references/trade-data-schema.md`, `references/contract-api-definitions.md`, and `references/troubleshooting.md` as needed
 
@@ -136,6 +142,30 @@ Mode guidance:
 
 For exact setup, lock/unlock, and password-change commands, open `references/linux-vault.md`.
 
+## Automated Strategy Authorization
+
+- This V1 path is for the official Trader distribution, saved profiles, and real trading only. It does not authorize demo trading and does not auto-detect external scripts.
+- Each strategy must register a stable `strategy_id`, then call the authorization facade at startup before its first order. A copied strategy registers a new ID; a renamed or restarted strategy reuses its existing ID. Each strategy has an independent authorization.
+- Require every new scope to include `trade_types`, symbols/all-symbols, maximum conservative U amount per leg, maximum cumulative U amount during the validity period, and `valid_hours`. `trade_types` may contain `SPOT`, `FUTURES`, or both. When a natural-language request omits validity, ask the user instead of choosing a default. The JSON CLI requires `valid_hours`; it must be greater than zero and cannot exceed 720 hours (30 days).
+- A natural-language request that does not state a cumulative quota must be paused for a separate user choice. Never derive `max_total_amount` from frequency, validity, target amount, max_single_amount, balance, or expected order count. The exact user-provided value must appear in the final confirmation and match the authorization request.
+- Show the complete saved-profile name, masked strategy ID, Spot/Futures modules, symbols, maximum conservative per-leg amount, cumulative quota, projected validity, per-order-confirmation effect, revoke action, and local trust boundary before grant. Grant requires the exact request and scope signature plus `--confirm-live`.
+- A real-trading automation may become `ACTIVE` only in the same atomic update that includes an `UNTIL` no later than the authorization expiry; never activate an unbounded recurrence, even temporarily. If the runtime cannot update status and expiry atomically, keep the automation `PAUSED`.
+- Authorization scope follows the official Spot/Futures modules, not REST paths. Only the explicit official operation catalog may enter the automatic path; new or unknown endpoints do not inherit authorization.
+- Quota is calculated by deterministic code from fresh official WEEX facts. The per-leg maximum constrains that conservative estimate, not the target or actual fill amount. When the Futures quantity unit cannot be proven uniquely, use the conservative notional `quantity * price * max(1, contractVal)` before leverage and fee bounds; this is an upper-bound estimate, not exact exchange margin. AI text never changes balances or authorization state. Missing, stale, degraded, incomplete-depth, unconvertible, or unproven reduce-only facts require the existing manual preview-and-confirm flow.
+- Before Spot quota reservation, validate quantity with Decimal against official `stepSize`, `minTradeAmount`, and `maxTradeAmount`. A Spot BUY requires the matching quote asset's available U value to cover the conservative estimate; a Spot SELL requires the matching base asset's available quantity to cover the order quantity. Missing or mismatched product/asset facts fail closed.
+- Batch submissions reserve every leg atomically before any WEEX write. Each leg keeps its strategy, authorization, usage, submission group, opaque client order ID, and WEEX order ID mapping. Accepted legs consume estimated quota permanently; explicit rejections release it and preserve sanitized, bounded `error_code`/`error_message` in the leg result and `USAGE_RELEASED` event; unknown results or mappings remain `REVIEW_REQUIRED`. Error text never changes the state-classification rules. Never split, retry, or positionally guess a batch result.
+- Full-position TP/SL (`quantity` is `0` or omitted) always returns to manual confirmation because the automatic path has no deterministic quantity. Partial reduce-only orders require official proof and use a conservative fee upper bound.
+- Normal risk advisories are recorded but do not block an in-scope automatic order. Hard constraints, incomplete risk data, missing authorization, scope/quota violations, revoked/expired authorization, state conflicts, and unsupported operations block every WEEX write and return to manual confirmation. Authorizations that contain the removed expanded-scope fields remain auditable but return `AUTHORIZATION_SCOPE_REAUTHORIZATION_REQUIRED` until the user grants a new V1.1 scope.
+- Raw API keys, secrets, passphrases, passwords, arbitrary direct database access, and direct production calls to internal guard collaborators are forbidden at this boundary. Use a selected saved profile; all production state and automatic-order actions go through `scripts/weex_auto_trade.py`.
+- Use `event-list` for the durable per-order audit trail. Public `submit-auto` legs and event payloads keep the leg's conservative value in `estimated_amount_u` and group authorization totals under `authorization_quota`; they do not expose cumulative `accepted_amount_u` beside a leg amount. Ordinary accepted events are claimed as one owner-scoped UTC 60-second summary; a credential-free detached one-shot worker waits for the final window to close even when no later facade command runs, then exits. Exceptions are immediate. Notification adapters run once, do not retry, and never change trade or quota state.
+- Reconciliation records exchange status, fills, quote amount, and fees separately. For archived Spot orders, current-detail error `-2200` falls back to official history orders plus trades and requires the saved order ID and client order ID to match; incomplete fill or fee evidence stays `PARTIAL`. The per-order conservative value is `estimated_amount_u`; current authorization totals are scoped under `authorization_quota` and are not exposed as a top-level per-order `accepted_amount_u`. Reconciliation never changes the accepted conservative authorization amount. Six-table activity and terminal history are retained; there is no purge/TTL path.
+- `resolve-auto-usage` accepts only `profile`, `strategy_id`, and `usage_id`. The facade performs a read-only WEEX query and internally binds usage, strategy, authorization, submission group, leg, client order, and WEEX order identities. Caller-supplied outcomes/evidence/order IDs, query timeouts, ambiguity, mismatches, and Futures submissions without a queryable order ID cannot release quota and remain `REVIEW_REQUIRED`.
+- `snapshot-state` is an explicit local SQLite backup operation. It stores only validated owner-only regular snapshots in the Trader-managed `snapshots/` directory, returns immutable IDs and the registered list, defaults to retaining 10, and accepts only an integer count from 1 through 100. It publishes before rotating and never rotates unknown, temporary, failed, preserved pre-restore, or active database files.
+- `restore-state` accepts only a registered snapshot ID. Every syntactically valid attempt enables the persistent kill switch before index lookup, including unknown IDs and invalid indexes. It validates and, only through a complete registered path, migrates a temporary database; revokes restored ACTIVE authorizations; rejects restored pending requests; preserves RESERVED/REVIEW_REQUIRED records; backs up the current database as non-rotated evidence; then atomically switches. It never merges ledgers or acts on WEEX orders. A fresh ACTIVE authorization must dynamically return resolve-plus-enable while unresolved usage remains, enable-only while the restore latch remains, and `SUBMIT_ALLOWED` only after explicit enable; a submission-uncertain latch returns manual inspection/reconciliation instead. Post-switch detailed authorization, verified `resolve-auto-usage` handling for every unresolved record, and explicit `enable-auto-trading-after-restore --confirm-live` are required; pre-switch or expired ACTIVE rows cannot unlock the latch.
+- V1 snapshot protection is owner-only filesystem access, not password encryption. Do not accept snapshot paths, passwords, keys, encryption options, cloud upload, cross-machine synchronization, or claims that same-OS-user compromise is prevented.
+- Automated-authorization state is unavailable on Windows until owner-only DACL creation and verification are implemented; fail closed instead of treating POSIX mode bits as a Windows access-control proof. This restriction is specific to automated-authorization state.
+- Owner-only local permissions, foreign keys, integrity checks, migrations, and business invariants are misuse/corruption controls, not identity authentication or tamper-proofing against an attacker controlling the same OS user, Agent, Vault session, or API key.
+
 ## Safety Policy
 
 - Never send live mutating requests without `--confirm-live`; never send demo mutating requests without `--trading-mode demo --confirm-demo`
@@ -148,7 +178,8 @@ For exact setup, lock/unlock, and password-change commands, open `references/lin
 - For every natural-language summary that uses private WEEX data or mentions a private order action, start with `user_environment_prefix` when it is returned. This includes account balances, positions, account risk, order previews, submitted order results, order cancel results, TP/SL order results, open-order queries, order status queries, and order-history queries. If a private command returns `environment` but not `user_environment_prefix`, derive the first line from that environment before summarizing anything else.
 - The environment prefix must be the first user-visible line, using localized labels such as `模拟盘` or `Current trading mode: real trading`. Keep this prefix informational; it is not an order confirmation gate.
 - Every natural-language order preview flow must return structured risk output before the order can be confirmed
-- For natural-language order preview confirmations, show the returned `user_confirmation.reply_instruction` as the user-facing confirmation block. The confirmation block must put the mode and funds warning first, then include the risk preview status, order summary, highest-priority warning plus any additional risk alerts, the exact confirmation reply, and include the switch prompt from `user_confirmation.switch_reply_text` when present.
+- For `transaction.place_tp_sl_order`, `quantity` is optional: `0` or omitted means TP/SL for the full position. When the user requests full-position TP/SL, AI must not ask for quantity merely because it is absent. The preview and confirmation must explicitly state that the TP/SL order applies to the full position; a non-zero quantity remains a partial-position request.
+- For natural-language order preview confirmations, show the returned `user_confirmation.reply_instruction` verbatim as the user-facing confirmation block. Do not summarize, truncate, or reconstruct it manually. The confirmation block must put the mode and funds warning first, then include the risk preview status, order summary, highest-priority warning plus any additional risk alerts, the exact confirmation reply, and include the switch prompt from `user_confirmation.switch_reply_text` when present. For ordinary `preview-order`, preserve the final localized automated-trading authorization paragraph after any mode-switch line.
 - For natural-language confirmations, the only text the user should reply with to execute is `user_confirmation.reply_text`; keep `intent_id` plus `risk_signature` internal to the execution step. The reply text is intentionally simple and localized — a single word such as `confirm` for English.
 - Pending order intents expire after a short TTL and must be regenerated when they are stale
 - Confirmation must bind to the latest preview via `intent_id` and `risk_signature`; do not reuse old confirmation tokens

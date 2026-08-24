@@ -5,6 +5,9 @@
     "scripts/weex_partner_cli.py": {
       "role": "Deterministic seven-operation orchestration, validation, paging, Decimal aggregation, environment-bound continuation, and trader subprocess protocol."
     },
+    "scripts/check_official_partner_contract.py": {
+      "role": "Read-only independent comparison of the seven supported Partner wire contracts against the current Chinese and English official API pages."
+    },
     "references/partner-query-policy.md": {
       "role": "Scope, time, paging, batching, and completeness rules."
     },

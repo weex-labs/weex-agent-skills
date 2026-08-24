@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-本仓库为 Codex、Claude Code、Cursor、GitHub Copilot 和 OpenClaw 提供 WEEX Skills 安装入口。前四个宿主已完成本地安装 dry-run；OpenClaw 需使用原生安装器，本工作区尚未完成实机 smoke，不能据此宣称五宿主均已验收。
+本仓库为 Codex、Claude Code、Cursor、GitHub Copilot 和 OpenClaw 提供 WEEX Skills 安装入口。前四个宿主使用本地安装器；OpenClaw 使用固定的本地 Git 仓库和 skill 目录软链接，并由仓库内更新脚本统一维护。
 
 安装这些 skill 以后，你可以让 AI 工具查询 WEEX 市场数据、查看账户状态、采集交易历史、预览订单风险、创建自动化监控，或分析 WEEX 交易记录。普通使用不需要你直接运行 Python 脚本，从聊天里点名 skill 开始即可。
 
@@ -13,14 +13,16 @@
 1. 推荐方式：直接让 AI 工具帮你安装：
 
 ```text
-请从 https://github.com/weex-labs/weex-trader-skill 安装全部 WEEX Agent Skills。
+请从 https://github.com/weex-labs/weex-agent-skills 安装全部 WEEX Agent Skills。
 ```
 
 如果你想手动安装，运行：
 
 ```bash
-npx skills add https://github.com/weex-labs/weex-trader-skill --all
+npx skills add https://github.com/weex-labs/weex-agent-skills --all
 ```
+
+OpenClaw 用户不要使用上面的 `npx` 命令，请改用下方的 [Git 仓库与软链接流程](#安装或更新-openclaw)。
 
 2. 安装完成后，在 AI 工具里点名你要用的 skill：
 
@@ -45,6 +47,7 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 - 设置并使用已保存的 API profile
 - 采集标准化交易历史，供后续分析使用
 - 在实时交易前预览订单风险
+- 为保存的策略注册有限期、可撤销、按额度控制且可审计的自动交易授权
 - 在你明确确认后，下现货或合约订单，或撤销订单
 
 示例提示词：
@@ -56,6 +59,26 @@ npx skills add https://github.com/weex-labs/weex-trader-skill --all
 | 采集历史 | `使用 $weex-trader-skill 采集我最近 30 天的 BTCUSDT 合约交易历史复盘数据。` |
 | 预览风险 | `使用 $weex-trader-skill 在开 BTCUSDT 多单前预览风险。` |
 | 准备实时订单 | `使用 $weex-trader-skill 先预览一笔 200 USDT 的 BTC 市价买入，等我确认后再决定是否下单。` |
+| 配置自动交易授权 | `使用 $weex-trader-skill 为我的策略申请 24 小时现货和合约自动交易授权，单笔 200 U、累计 2000 U。` |
+
+### 自动策略授权
+
+正式版 Trader 支持用户自己维护的 Python/量化策略显式接入，不会自动识别或包装任意脚本；自动交易授权只支持 saved profile 的真实盘，不支持模拟盘。策略需要先注册稳定身份，在首次下单前请求自己的授权。重启或改名后继续复用该身份；复制策略会得到新身份，并拥有独立的授权和额度。授权范围只有五个维度：现货/合约模块、指定交易对或全部交易对、单个 leg 的保守 U 估算上限、有效期内累计 U 估算上限，以及明确的有效期；不额外限制买卖方向、订单类型、最小下单金额或订单次数。自然语言请求缺少有效期时必须先向用户确认；累计额度未明确时也必须暂停并单独询问，不得根据频率、有效期、目标金额、单笔上限、余额或预计笔数推算 `max_total_amount`；最终确认中的累计额度必须与用户输入一致。JSON CLI 的 `valid_hours` 为必填项，必须大于 0 且不能超过 720 小时（30 天）。授权必须绑定原始申请并使用 `--confirm-live` 才能生效。待确认申请本身没有交易权限，并会在 15 分钟后失效；授权有效期从批准成功时开始计算。修改任一授权维度都需要重新申请并明确授权，新授权生效后会替换该策略原有的活动授权。
+
+真实盘自动任务只有在同一次原子更新中同时写入 `ACTIVE` 和不晚于授权到期时间的 `UNTIL` 后才能运行；不得先激活无到期时间的循环。如果运行时不能原子更新状态和到期时间，必须保持 `PAUSED`。
+
+用户确认授权时需要理解：
+
+- 授权只会修改本地授权状态，本身不会向 WEEX 提交订单。
+- 授权有效期间，符合范围且通过检查的订单可以不再逐笔确认；每笔订单仍必须通过官方数据、风险、产品规则、余额、范围和额度检查。
+- 单个 leg 和累计额度约束的是保守 U 估算值，不是请求金额或实际成交金额。订单一旦被接受，其估算额度会在本次授权期内持续占用，后续对账不会返还。
+- 授权过期或撤销只会阻止未来的自动预占；停用策略还会永久阻止该策略身份再次申请授权。这些操作不会取消、重试或修改已经提交到 WEEX 的订单。
+
+只有官方现货/合约操作且官方数据新鲜、完整时才能进入自动路径。批量 leg 先整组原子校验和预占，再记录策略、授权、usage、提交组、client order ID 与 WEEX order ID。订单被 WEEX 明确接受后，保守估算额度不会因后续对账返还；明确拒绝会释放预占；结果或映射不确定时转人工且不重试。全仓 TP/SL、无法证明的只减仓语义、陈旧/降级数据、缺少汇率/深度/杠杆/费率、超范围/超额、撤销或过期授权、状态冲突和未知操作都不会自动下单。
+
+授权生命周期、`submit-auto`、恢复、事件和官方只读对账统一使用 `skills/weex-trader-skill/scripts/weex_auto_trade.py` 的 saved-profile JSON facade；策略通过子进程调用该 CLI，不直接 import 状态内核，也不能注入生产 risk/fact/submit 实现。原始凭据和直接写数据库都会被拒绝。本地 owner-only 权限、完整性检查和迁移只用于降低误用/损坏风险，不是身份认证，也不能防御控制同一 OS 用户、Agent 或 Vault 会话的攻击者。普通成功通知可以按 60 秒聚合，异常通知立即发送且只尝试一次。完整 JSON 命令见 [脚本操作说明](skills/weex-trader-skill/references/script-operations.md)。
+
+同一个 facade 支持用户显式触发的 owner-only 本地快照，默认保留 10 份（范围 1-100），并只按 Trader 生成的 snapshot ID 恢复。任何语法有效的恢复尝试都会在读取索引前先开启持久 kill switch，因此未知 ID、损坏索引或无效快照也会保持自动交易关闭。恢复会保留当前数据库证据和未决 usage；必须重新完成晚于 kill switch 的详细授权，用可靠证据通过 `resolve-auto-usage` 处理全部未决记录，再显式执行 `enable-auto-trading-after-restore --confirm-live`。快照不提供额外密码加密，也不会自动上传或跨设备同步。自动授权状态目前在 Windows 上 fail-closed，直到实现并验证 owner-only DACL；Trader 其他 Windows 流程不受影响。
 
 ### `weex-analysis-skill`
 
@@ -137,16 +160,61 @@ Claude Code、Cursor、GitHub Copilot 分别使用 `--agent claude-code`、`--ag
 
 `weex-monitor-skill` 和 `weex-partner-skill` 都依赖 `weex-trader-skill`。从本地安装器单独安装任意一个时会自动带上 trader；普通使用仍建议安装全部 skills。
 
-OpenClaw 使用原生 Skill 安装器。在仓库根目录先安装 trader，再安装 partner：
+### 安装或更新 OpenClaw
+
+OpenClaw 统一保留一个固定 Git 仓库，并通过软链接暴露每个 skill。默认目录结构如下：
+
+- 仓库：`~/.openclaw/skill-repos/weex-agent-skills`
+- `~/.openclaw/skills/weex-trader-skill`
+- `~/.openclaw/skills/weex-analysis-skill`
+- `~/.openclaw/skills/weex-monitor-skill`
+- `~/.openclaw/skills/weex-partner-skill`
+
+在包含本版本代码的仓库目录中运行：
 
 ```bash
-openclaw skills install ./skills/weex-trader-skill --as weex-trader-skill
-openclaw skills install ./skills/weex-partner-skill --as weex-partner-skill
+bash skills/weex-trader-skill/scripts/update_openclaw_skills.sh
 ```
 
-全局共享安装时两条命令都追加 `--global`；只安装到某个 Agent workspace 时两条命令都追加 `--agent <id>`。随后运行 `openclaw skills list --eligible`、`openclaw skills info weex-partner-skill` 和 `openclaw skills check`。不要使用 `gh skill install --agent openclaw`。
+脚本会从官方仓库取得批准的固定 release commit `e10c2089550159afb7247271d1041d9b415145cd`，生产模式不会跟随可变分支。它先在临时目录校验 Git 对象完整性、四个 skill 和无 submodule，再切换软链接并运行 OpenClaw 检查；稳定更新副本保存在 `~/.openclaw/update-weex-openclaw-skills.sh`，拉取的 checkout 不能覆盖更新入口。任一步失败都会恢复旧 checkout 和旧链接。
 
-大多数用户只需要使用 [从这里开始](#从这里开始) 中的 GitHub 安装命令。
+```bash
+openclaw skills list --eligible
+openclaw skills info weex-trader-skill
+openclaw skills check
+```
+
+以后更新只需要运行：
+
+```bash
+~/bin/update-weex-openclaw-skills.sh
+```
+
+如果链接目标位置已经存在真实文件或目录，脚本会停止，不会覆盖用户数据；请人工处理冲突后重试。其他仓库或分支只允许显式开发模式：
+
+```bash
+WEEX_OPENCLAW_REPO_URL=/path/to/checkout \
+WEEX_OPENCLAW_BRANCH=feature/my-branch \
+bash skills/weex-trader-skill/scripts/update_openclaw_skills.sh --dev
+```
+
+`WEEX_OPENCLAW_REPO_DIR`、`WEEX_OPENCLAW_SKILLS_DIR` 和 `WEEX_OPENCLAW_BIN_LINK` 仍可用于选择本地安装目录。
+
+校验失败时脚本已经自动保留旧 checkout 和旧链接；需要再次回滚或恢复时，重新运行稳定更新入口：
+
+```bash
+bash ~/.openclaw/update-weex-openclaw-skills.sh
+```
+
+最后新建一个 OpenClaw 任务，执行只读 smoke test：
+
+```text
+使用 $weex-trader-skill 查询 BTCUSDT 最新现货价格。
+```
+
+不要使用 `gh skill install --agent openclaw`；根目录 Python 安装器继续只服务其他受支持宿主。
+
+Codex、Claude Code、Cursor 或 GitHub Copilot 用户通常只需要使用 [从这里开始](#从这里开始) 中的 GitHub 安装命令；OpenClaw 用户继续使用上面的专用流程。
 
 ## 使用前请注意
 

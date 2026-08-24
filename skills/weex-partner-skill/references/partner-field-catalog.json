@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "contract_version": "partner-v3-2026-06-22",
-  "last_verified_utc": "2026-07-28",
+  "last_verified_utc": "2026-07-31",
   "authority": "WEEX official Chinese and English Partner API request and response parameter tables",
   "operations": {
     "list-referral-uids": {
@@ -639,7 +639,7 @@
           "official_required": false,
           "skill_required": true,
           "transport": "query",
-          "official_description_zh": "起始时间（UTC，格式 yyyy-MM-dd）",
+          "official_description_zh": "起始时间（UTC，格式 yyyy-MM-dd ）",
           "official_description_en": "Optional start time (UTC, format yyyy-MM-dd)"
         },
         {
@@ -719,7 +719,7 @@
           "official_required": false,
           "skill_required": true,
           "transport": "query",
-          "official_description_zh": "开始日期（UTC，格式 yyyy-MM-dd）",
+          "official_description_zh": "开始日期（UTC，格式 yyyy-MM-dd ）",
           "official_description_en": "Filter start date (UTC, format yyyy-MM-dd)"
         },
         {
@@ -728,7 +728,7 @@
           "official_required": false,
           "skill_required": true,
           "transport": "query",
-          "official_description_zh": "结束日期（UTC，格式 yyyy-MM-dd）",
+          "official_description_zh": "结束日期（UTC，格式 yyyy-MM-dd ）",
           "official_description_en": "Filter end date (UTC, format yyyy-MM-dd)"
         }
       ],
@@ -773,16 +773,16 @@
           "type": "String",
           "role": "query_echo",
           "format": "date",
-          "official_description_zh": "本次查询使用的开始日期（yyyy-MM-dd）",
-          "official_description_en": "Start date applied by the upstream service (yyyy-MM-dd)"
+          "official_description_zh": "本次查询使用的开始日期（ yyyy-MM-dd ）",
+          "official_description_en": "Start date applied by the upstream service ( yyyy-MM-dd )"
         },
         {
           "wire_name": "endTime",
           "type": "String",
           "role": "query_echo",
           "format": "date",
-          "official_description_zh": "本次查询使用的结束日期（yyyy-MM-dd）",
-          "official_description_en": "End date applied by the upstream service (yyyy-MM-dd)"
+          "official_description_zh": "本次查询使用的结束日期（ yyyy-MM-dd ）",
+          "official_description_en": "End date applied by the upstream service ( yyyy-MM-dd )"
         }
       ]
     }

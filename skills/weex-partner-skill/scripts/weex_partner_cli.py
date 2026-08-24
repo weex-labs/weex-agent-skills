@@ -520,7 +520,13 @@ def _normalize_filters(
         coin = filters["coin"]
         if not isinstance(coin, str) or not coin.strip() or not coin.strip().isalnum():
             raise PartnerQueryError("invalid_coin", "coin must be a non-empty alphanumeric symbol.")
-        filters["coin"] = coin.strip().upper()
+        normalized_coin = coin.strip().upper()
+        if operation == "get-commission" and normalized_coin not in {"USDT", "BTC"}:
+            raise PartnerQueryError(
+                "invalid_coin",
+                "coin for get-commission must be USDT or BTC.",
+            )
+        filters["coin"] = normalized_coin
     if "withdraw_id" in filters:
         withdraw_id = filters["withdraw_id"]
         if isinstance(withdraw_id, bool) or isinstance(withdraw_id, (Mapping, list, tuple, set)):
