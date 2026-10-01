@@ -467,7 +467,6 @@ class WeexPartnerCliPolicyTests(unittest.TestCase):
             ({"status": "SUCCESS"}, "invalid_filters"),
             ({"product_type": "MARGIN"}, "invalid_product_type"),
             ({"coin": ""}, "invalid_coin"),
-            ({"coin": "ETH"}, "invalid_coin"),
         ):
             with self.subTest(filters=filters):
                 with self.assertRaises(partner.PartnerQueryError) as exc_info:

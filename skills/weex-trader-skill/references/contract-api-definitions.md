@@ -1,6 +1,6 @@
 # WEEX Contract API Definitions
 
-Generated from live V3 docs on 2026-07-31.
+Generated from live V3 docs on 2026-04-17.
 
 Contract simulated futures endpoints are maintained in this generated catalog from the official WEEX contract demo API docs.
 Demo is not a local dry-run; demo mutating endpoints send requests to WEEX futures demo mode.
@@ -77,10 +77,7 @@ Total endpoints: **47**
 - Path: `/capi/v3/account/positionMargin`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
-- Permission: `TRADE`
-- Weight(IP): `15`
+- Weight(IP/UID): `15 / 30`
 - Source: https://www.weex.com/api-doc/contract/Account_API/AdjustPositionMarginTRADE
 
 ### Request Parameters
@@ -105,10 +102,7 @@ Total endpoints: **47**
 - Path: `/capi/v3/account/marginType`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
-- Permission: `TRADE`
-- Weight(IP): `20`
+- Weight(IP/UID): `20 / 50`
 - Source: https://www.weex.com/api-doc/contract/Account_API/ChangeMarginModeTRADE
 
 ### Request Parameters
@@ -133,13 +127,8 @@ Total endpoints: **47**
 - Path: `/capi/v3/account/balance`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `USER_DATA`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Account_API/GetAccountBalance
-- Request Constraints:
-  - NONE
 
 ### Request Parameters
 
@@ -161,13 +150,8 @@ NONE
 - Path: `/capi/v3/account/accountConfig`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `object`
-- Permission: `USER_DATA`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Account_API/GetAccountConfig
-- Request Constraints:
-  - NONE
 
 ### Request Parameters
 
@@ -189,13 +173,8 @@ NONE
 - Path: `/capi/v3/account/position/allPosition`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `USER_DATA`
-- Weight(IP): `10`
+- Weight(IP/UID): `10 / 15`
 - Source: https://www.weex.com/api-doc/contract/Account_API/GetAllPositions
-- Request Constraints:
-  - NONE
 
 ### Request Parameters
 
@@ -241,10 +220,7 @@ NONE
 - Path: `/capi/v3/account/commissionRate`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `object`
-- Permission: `USER_DATA`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Account_API/GetCommissionRate
 
 ### Request Parameters
@@ -267,10 +243,7 @@ NONE
 - Path: `/capi/v3/account/income`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
-- Permission: `USER_DATA`
-- Weight(IP): `2`
+- Weight(IP/UID): `2 / 5`
 - Source: https://www.weex.com/api-doc/contract/Account_API/GetContractBills
 
 ### Request Parameters
@@ -283,27 +256,22 @@ NONE
 | `startTime` | `Long` | `No` | Start timestamp Unit: milliseconds. If only endTime is provided, the system defaults startTime to 30 days before endTime (not earlier than current time). |
 | `endTime` | `Long` | `No` | End timestamp Unit: milliseconds. If only startTime is provided, endTime defaults to the current time. When both are provided, the range must not exceed 100 days. |
 | `limit` | `Integer` | `No` | Return record limit, default: 20 Minimum: 1 Maximum: 100 |
-| `nextKeyId` | `Long` | `No` | Cursor ID returned from the previous page. |
-| `nextKeyTime` | `Long` | `No` | Cursor time returned from the previous page. |
 
 ### Response Parameters
 
 | Name | Type | Description |
 |---|---|---|
 | `hasNextPage` | `Boolean` | Whether there is a next page |
-| `nextKey` | `Object` | Cursor for the next page. |
-| `nextKey.nextKeyId` | `Long` | Cursor ID. |
-| `nextKey.nextKeyTime` | `Long` | Cursor time in milliseconds. |
 | `items` | `Array` | Data list |
-| `items[].billId` | `Long` | Bill ID |
-| `items[].asset` | `String` | Asset name |
-| `items[].symbol` | `String` | Trading pair |
-| `items[].income` | `String` | Amount |
-| `items[].incomeType` | `String` | Income type |
-| `items[].balance` | `String` | Balance |
-| `items[].fillFee` | `String` | Transaction fee |
-| `items[].time` | `Long` | Creation time Unix millisecond timestamp |
-| `items[].transferReason` | `String` | Transfer Reason UNKNOWN_TRANSFER_REASON: Unknown transfer reason USER_TRANSFER: User manual transfer INCREASE_CONTRACT_CASH_GIFT: Increase contract cash gift REDUCE_CONTRACT_CASH_GIFT: Reduce contract cash gift REFUND_WXB_DISCOUNT_FEE: Refund WXB discount fee |
+| `> billId` | `Long` | Bill ID |
+| `> asset` | `String` | Asset name |
+| `> symbol` | `String` | Trading pair |
+| `> income` | `String` | Amount |
+| `> incomeType` | `String` | Income type |
+| `> balance` | `String` | Balance |
+| `> fillFee` | `String` | Transaction fee |
+| `> time` | `Long` | Creation time Unix millisecond timestamp |
+| `> transferReason` | `String` | Transfer Reason UNKNOWN_TRANSFER_REASON: Unknown transfer reason USER_TRANSFER: User manual transfer INCREASE_CONTRACT_CASH_GIFT: Increase contract cash gift REDUCE_CONTRACT_CASH_GIFT: Reduce contract cash gift REFUND_WXB_DISCOUNT_FEE: Refund WXB discount fee |
 
 ## account.get_single_position — Get Single Position (USER_DATA)
 
@@ -311,10 +279,7 @@ NONE
 - Path: `/capi/v3/account/position/singlePosition`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `USER_DATA`
-- Weight(IP): `2`
+- Weight(IP/UID): `2 / 3`
 - Source: https://www.weex.com/api-doc/contract/Account_API/GetSinglePosition
 
 ### Request Parameters
@@ -325,37 +290,7 @@ NONE
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `id` | `Long` | Position ID |
-| `asset` | `String` | Associated collateral asset |
-| `symbol` | `String` | Trading pair |
-| `side` | `String` | Position direction such as LONG or SHORT |
-| `marginType` | `String` | Margin mode of current position CROSSED: Cross Mode ISOLATED: Isolated Mode |
-| `separatedMode` | `String` | Current position's separated mode COMBINED: Combined mode SEPARATED: Separated mode |
-| `separatedOpenOrderId` | `Long` | Opening order ID of separated position |
-| `leverage` | `String` | Position leverage |
-| `size` | `String` | Current position size |
-| `openValue` | `String` | Initial value at position opening |
-| `openFee` | `String` | Opening fee |
-| `fundingFee` | `String` | Funding fee |
-| `marginSize` | `String` | Margin amount (margin coin) |
-| `isolatedMargin` | `String` | Isolated margin |
-| `isAutoAppendIsolatedMargin` | `Boolean` | Whether the auto-adding of funds for the isolated margin is enabled (only for isolated mode) |
-| `cumOpenSize` | `String` | Accumulated opened positions |
-| `cumOpenValue` | `String` | Accumulated value of opened positions |
-| `cumOpenFee` | `String` | Accumulated fees paid for opened positions |
-| `cumCloseSize` | `String` | Accumulated closed positions |
-| `cumCloseValue` | `String` | Accumulated value of closed positions |
-| `cumCloseFee` | `String` | Accumulated fees paid for closing positions |
-| `cumFundingFee` | `String` | Accumulated settled funding fees |
-| `cumLiquidateFee` | `String` | Accumulated liquidation fees |
-| `createdMatchSequenceId` | `Long` | Matching engine sequence ID at creation |
-| `updatedMatchSequenceId` | `Long` | Matching engine sequence ID at last update |
-| `createdTime` | `Long` | Creation time Unix millisecond timestamp |
-| `updatedTime` | `Long` | Update time Unix millisecond timestamp |
-| `unrealizePnl` | `String` | Unrealized PnL |
-| `liquidatePrice` | `String` | Estimated liquidation price If the value = 0, it means the position is at low risk and there is no liquidation price at this time |
+NONE
 
 ## account.get_symbol_config — Get Symbol Configuration (USER_DATA)
 
@@ -363,10 +298,7 @@ NONE
 - Path: `/capi/v3/account/symbolConfig`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `USER_DATA`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Account_API/GetSymbolConfig
 
 ### Request Parameters
@@ -392,10 +324,7 @@ NONE
 - Path: `/capi/v3/account/modifyAutoAppendMargin`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
-- Permission: `TRADE`
-- Weight(IP): `15`
+- Weight(IP/UID): `15 / 30`
 - Source: https://www.weex.com/api-doc/contract/Account_API/ModifyAutoAppendMarginTRADE
 
 ### Request Parameters
@@ -419,13 +348,8 @@ NONE
 - Path: `/capi/v3/account/leverage`
 - Category: `account`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
-- Permission: `TRADE`
-- Weight(IP): `10`
+- Weight(IP/UID): `10 / 20`
 - Source: https://www.weex.com/api-doc/contract/Account_API/UpdateLeverageTRADE
-- Request Constraints:
-  - At least one of crossLeverage , isolatedLongLeverage , or isolatedShortLeverage must be provided.
 
 ### Request Parameters
 
@@ -455,12 +379,8 @@ NONE
 - Path: `/capi/v3/market/apiTradingSymbols`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetApiTradingSymbols
-- Request Constraints:
-  - No parameters.
 
 ### Request Parameters
 
@@ -470,7 +390,7 @@ NONE
 
 | Name | Type | Description |
 |---|---|---|
-| `$` | `Array<String>` | Raw response is an array of futures symbols available for API trading. |
+| `symbols[]` | `Array<String>` | Raw response is an array of futures symbols available for API trading. |
 
 ## market.get_book_ticker — Get Best Bid/Ask
 
@@ -478,9 +398,7 @@ NONE
 - Path: `/capi/v3/market/ticker/bookTicker`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetBookTicker
 
 ### Request Parameters
@@ -506,9 +424,7 @@ NONE
 - Path: `/capi/v3/market/exchangeInfo`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `object`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetContractInfo
 
 ### Request Parameters
@@ -521,37 +437,27 @@ NONE
 
 | Name | Type | Description |
 |---|---|---|
-| `assets` | `Array` | Collateral assets list. Each item matches the Coin object (assets[]) . |
-| `rateLimits` | `Array` | API access rate limits. Each item matches the Rate-limit object (rateLimits[]) . |
-| `symbols` | `Array` | Contract configuration list. Each item matches the Symbol object (symbols[]) . |
-| `assets[].asset` | `String` | Asset symbol (collateral currency) |
-| `assets[].marginAvailable` | `Boolean` | Whether the asset can be used as collateral |
-| `rateLimits[].interval` | `String` | Rate-limit interval unit, e.g. MINUTE |
-| `rateLimits[].intervalNum` | `Integer` | Number of interval units, e.g. 1 |
-| `rateLimits[].limit` | `Integer` | Maximum allowed count within the interval |
-| `rateLimits[].rateLimitType` | `String` | Rate-limit type, e.g. REQUEST_WEIGHT or ORDERS |
-| `symbols[].symbol` | `String` | Trading pair name (e.g. BTCUSDT) |
-| `symbols[].displaySymbol` | `String` | Trading pair display name |
-| `symbols[].baseAsset` | `String` | Base asset |
-| `symbols[].quoteAsset` | `String` | Quote asset |
-| `symbols[].marginAsset` | `String` | Margin asset |
-| `symbols[].pricePrecision` | `Integer` | Price precision |
-| `symbols[].quantityPrecision` | `Integer` | Quantity precision |
-| `symbols[].baseAssetPrecision` | `Integer` | Precision for base asset quantity |
-| `symbols[].quotePrecision` | `Integer` | Precision for quote asset quantity |
-| `symbols[].contractVal` | `Decimal` | Contract size |
-| `symbols[].delivery` | `Array` | Settlement times |
-| `symbols[].forwardContractFlag` | `Boolean` | Whether the contract is USDT-margined |
-| `symbols[].minLeverage` | `Integer` | Minimum leverage |
-| `symbols[].maxLeverage` | `Integer` | Maximum leverage |
-| `symbols[].buyLimitPriceRatio` | `Decimal` | Buy-side price limit ratio |
-| `symbols[].sellLimitPriceRatio` | `Decimal` | Sell-side price limit ratio |
-| `symbols[].makerFeeRate` | `Decimal` | Maker commission rate |
-| `symbols[].takerFeeRate` | `Decimal` | Taker commission rate |
-| `symbols[].minOrderSize` | `Decimal` | Minimum order size (base asset) |
-| `symbols[].maxOrderSize` | `Decimal` | Maximum order size (base asset) |
-| `symbols[].maxPositionSize` | `Decimal` | Maximum position size (base asset) |
-| `symbols[].marketOpenLimitSize` | `Decimal` | Maximum market order size for opening positions (base asset) |
+| `assets[]` | `Array<Object>` | Collateral assets list. |
+| `assets[].asset` | `String` | Collateral asset symbol. |
+| `assets[].marginAvailable` | `Boolean` | Whether the asset can be used as margin. |
+| `symbols[]` | `Array<Object>` | Contract symbol configuration list. |
+| `symbols[].symbol` | `String` | Contract trading pair symbol. |
+| `symbols[].baseAsset` | `String` | Base asset symbol. |
+| `symbols[].quoteAsset` | `String` | Quote asset symbol. |
+| `symbols[].marginAsset` | `String` | Margin asset symbol. |
+| `symbols[].pricePrecision` | `Integer` | Price precision. |
+| `symbols[].quantityPrecision` | `Integer` | Quantity precision. |
+| `symbols[].contractVal` | `Number` | Contract value. |
+| `symbols[].minLeverage` | `Integer` | Minimum leverage. |
+| `symbols[].maxLeverage` | `Integer` | Maximum leverage. |
+| `symbols[].buyLimitPriceRatio` | `Number` | Maximum allowed buy-side limit price deviation ratio. |
+| `symbols[].sellLimitPriceRatio` | `Number` | Maximum allowed sell-side limit price deviation ratio. |
+| `symbols[].makerFeeRate` | `Number` | Maker fee rate. |
+| `symbols[].takerFeeRate` | `Number` | Taker fee rate. |
+| `symbols[].minOrderSize` | `Number` | Minimum order size. |
+| `symbols[].maxOrderSize` | `Number` | Maximum order size. |
+| `symbols[].maxPositionSize` | `Number` | Maximum position size. |
+| `symbols[].marketOpenLimitSize` | `Number` | Maximum market-open order size. |
 
 ## market.get_current_funding_rate — Get Current Funding Rate
 
@@ -559,9 +465,7 @@ NONE
 - Path: `/capi/v3/market/premiumIndex`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetCurrentFundingRate
 
 ### Request Parameters
@@ -590,9 +494,7 @@ NONE
 - Path: `/capi/v3/market/depth`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `object`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetDepthData
 
 ### Request Parameters
@@ -616,12 +518,8 @@ NONE
 - Path: `/capi/v3/market/fundingRate`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetFundingRateHistory
-- Request Constraints:
-  - The time span between startTime and endTime must not exceed 7 days.
 
 ### Request Parameters
 
@@ -629,7 +527,7 @@ NONE
 |---|---|---|---|
 | `symbol` | `String` | `Yes` | Trading pair |
 | `startTime` | `Long` | `No` | Start time (inclusive). Unix millisecond timestamp. |
-| `endTime` | `Long` | `No` | End time (inclusive). Unix millisecond timestamp. Must be ≥ startTime. |
+| `endTime` | `Long` | `No` | End time (inclusive). Unix millisecond timestamp. Must be â¥ startTime. |
 | `limit` | `Integer` | `No` | Number of records. Range: 1-1000. Default: 100. |
 
 ### Response Parameters
@@ -647,9 +545,7 @@ NONE
 - Path: `/capi/v3/market/historyKlines`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetHistoryKlines
 
 ### Request Parameters
@@ -659,25 +555,13 @@ NONE
 | `symbol` | `String` | `Yes` | Trading pair |
 | `interval` | `String` | `Yes` | Kline interval. Allowed values: 1m, 5m, 15m, 30m, 1h, 4h, 12h, 1d, 1w. |
 | `startTime` | `Long` | `No` | Start time (inclusive). Unix millisecond timestamp. Must not be in the future. |
-| `endTime` | `Long` | `No` | End time (inclusive). Unix millisecond timestamp. Must not be in the future and must be ≥ startTime. |
+| `endTime` | `Long` | `No` | End time (inclusive). Unix millisecond timestamp. Must not be in the future and must be â¥ startTime. |
 | `limit` | `Integer` | `No` | Number of klines to return. Range: 1-100. Default: 100. |
 | `priceType` | `String` | `No` | Price type. Supported values: LAST (last trade), INDEX (index price), MARK (mark price). Default: LAST. |
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `index[0]` | `Long` | Open time Unix millisecond timestamp |
-| `index[1]` | `String` | Open price |
-| `index[2]` | `String` | High price |
-| `index[3]` | `String` | Low price |
-| `index[4]` | `String` | Close price |
-| `index[5]` | `String` | Volume (base asset) |
-| `index[6]` | `Long` | Close time Unix millisecond timestamp |
-| `index[7]` | `String` | Quote volume (quote asset) |
-| `index[8]` | `Long` | Number of trades |
-| `index[9]` | `String` | Taker buy volume (base asset) |
-| `index[10]` | `String` | Taker buy volume (quote asset) |
+NONE
 
 ## market.get_index_price_klines — Get Index Price Klines
 
@@ -685,9 +569,7 @@ NONE
 - Path: `/capi/v3/market/indexPriceKlines`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetIndexPriceKlines
 
 ### Request Parameters
@@ -700,19 +582,7 @@ NONE
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `index[0]` | `Long` | Open time Unix millisecond timestamp |
-| `index[1]` | `String` | Open price |
-| `index[2]` | `String` | High price |
-| `index[3]` | `String` | Low price |
-| `index[4]` | `String` | Close price |
-| `index[5]` | `String` | Volume (base asset) |
-| `index[6]` | `Long` | Close time Unix millisecond timestamp |
-| `index[7]` | `String` | Quote volume (quote asset) |
-| `index[8]` | `Long` | Number of trades |
-| `index[9]` | `String` | Taker buy volume (base asset) |
-| `index[10]` | `String` | Taker buy volume (quote asset) |
+NONE
 
 ## market.get_klines — Get Kline Data
 
@@ -720,9 +590,7 @@ NONE
 - Path: `/capi/v3/market/klines`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetKlines
 
 ### Request Parameters
@@ -737,17 +605,17 @@ NONE
 
 | Name | Type | Description |
 |---|---|---|
-| `index[0]` | `Long` | Open time Unix millisecond timestamp |
-| `index[1]` | `String` | Open price |
-| `index[2]` | `String` | High price |
-| `index[3]` | `String` | Low price |
-| `index[4]` | `String` | Close price |
-| `index[5]` | `String` | Volume (base asset) |
-| `index[6]` | `Long` | Close time Unix millisecond timestamp |
-| `index[7]` | `String` | Quote volume (quote asset) |
-| `index[8]` | `Long` | Number of trades |
-| `index[9]` | `String` | Taker buy volume (base asset) |
-| `index[10]` | `String` | Taker buy volume (quote asset) |
+| `` | `Long` | Open time Unix millisecond timestamp |
+| `` | `String` | Open price |
+| `` | `String` | High price |
+| `` | `String` | Low price |
+| `` | `String` | Close price |
+| `` | `String` | Volume (base asset) |
+| `` | `Long` | Close time Unix millisecond timestamp |
+| `` | `String` | Quote volume (quote asset) |
+| `` | `Long` | Number of trades |
+| `` | `String` | Taker buy volume (base asset) |
+| `` | `String` | Taker buy volume (quote asset) |
 
 ## market.get_mark_price_klines — Get Mark Price Klines
 
@@ -755,9 +623,7 @@ NONE
 - Path: `/capi/v3/market/markPriceKlines`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetMarkPriceKlines
 
 ### Request Parameters
@@ -770,19 +636,7 @@ NONE
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `index[0]` | `Long` | Open time Unix millisecond timestamp |
-| `index[1]` | `String` | Open price |
-| `index[2]` | `String` | High price |
-| `index[3]` | `String` | Low price |
-| `index[4]` | `String` | Close price |
-| `index[5]` | `String` | Volume (base asset) |
-| `index[6]` | `Long` | Close time Unix millisecond timestamp |
-| `index[7]` | `String` | Quote volume (quote asset) |
-| `index[8]` | `Long` | Number of trades |
-| `index[9]` | `String` | Taker buy volume (base asset) |
-| `index[10]` | `String` | Taker buy volume (quote asset) |
+NONE
 
 ## market.get_open_interest — Get Open Interest
 
@@ -790,9 +644,7 @@ NONE
 - Path: `/capi/v3/market/openInterest`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `object`
-- Weight(IP): `2`
+- Weight(IP/UID): `2 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetOpenInterest
 
 ### Request Parameters
@@ -815,9 +667,7 @@ NONE
 - Path: `/capi/v3/market/trades`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetRecentTrades
 
 ### Request Parameters
@@ -845,12 +695,8 @@ NONE
 - Path: `/capi/v3/market/time`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `object`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetServerTime
-- Request Constraints:
-  - NONE
 
 ### Request Parameters
 
@@ -868,9 +714,7 @@ NONE
 - Path: `/capi/v3/market/symbolPrice`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `object`
-- Weight(IP): `1`
+- Weight(IP/UID): `1 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetSymbolPrice
 
 ### Request Parameters
@@ -894,9 +738,7 @@ NONE
 - Path: `/capi/v3/market/ticker/24hr`
 - Category: `market`
 - Requires Auth: `False`
-- Request Transport: `query`
-- Response Container: `array`
-- Weight(IP): `40`
+- Weight(IP/UID): `40 / -`
 - Source: https://www.weex.com/api-doc/contract/Market_API/GetTicker24h
 
 ### Request Parameters
@@ -925,19 +767,15 @@ NONE
 
 ## Sim Endpoint Sections
 
-## sim.account.get_account_balance — Get Account Balance Demo (USER_DATA)
+## sim.account.get_account_balance — Get Demo Account Balance (USER_DATA)
 
 - Method: `GET`
 - Path: `/capi/v3/sim/balance`
 - Category: `sim`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
 - Permission: `USER_DATA`
-- Weight(IP): `5`
-- Source: https://www.weex.com/api-doc/contract/demo/GetAccountBalance
-- Request Constraints:
-  - NONE
+- Weight(IP/UID): `5 / 10`
+- Source: https://www.weex.com/api-doc/zh-CN/contract/intro
 
 ### Request Parameters
 
@@ -947,25 +785,21 @@ NONE
 
 | Name | Type | Description |
 |---|---|---|
-| `asset` | `String` | Asset name |
-| `balance` | `String` | Total balance |
-| `availableBalance` | `String` | Available balance |
-| `frozen` | `String` | Frozen amount |
-| `unrealizePnl` | `String` | Unrealized Profit and Loss |
+| `asset` | `String` | Asset name. |
+| `balance` | `String` | Total balance. |
+| `availableBalance` | `String` | Available balance. |
+| `frozen` | `String` | Frozen amount. |
+| `unrealizePnl` | `String` | Unrealized profit and loss. |
 
-## sim.account.get_all_positions — Get All Positions Demo (USER_DATA)
+## sim.account.get_all_positions — Get Demo All Positions (USER_DATA)
 
 - Method: `GET`
 - Path: `/capi/v3/sim/position/allPosition`
 - Category: `sim`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
 - Permission: `USER_DATA`
-- Weight(IP): `10`
-- Source: https://www.weex.com/api-doc/contract/demo/GetAllPositions
-- Request Constraints:
-  - NONE
+- Weight(IP/UID): `10 / 15`
+- Source: https://www.weex.com/api-doc/zh-CN/contract/intro
 
 ### Request Parameters
 
@@ -975,56 +809,54 @@ NONE
 
 | Name | Type | Description |
 |---|---|---|
-| `id` | `Long` | Position ID |
-| `asset` | `String` | Associated collateral asset |
-| `symbol` | `String` | Trading pair |
-| `side` | `String` | Position direction such as LONG or SHORT |
-| `marginType` | `String` | Margin mode of current position CROSSED: Cross Mode ISOLATED: Isolated Mode |
-| `separatedMode` | `String` | Current position's separated mode COMBINED: Combined mode SEPARATED: Separated mode |
-| `separatedOpenOrderId` | `Long` | Opening order ID of separated position |
-| `leverage` | `String` | Position leverage |
-| `size` | `String` | Current position size |
-| `openValue` | `String` | Initial value at position opening |
-| `openFee` | `String` | Opening fee |
-| `fundingFee` | `String` | Funding fee |
-| `marginSize` | `String` | Margin amount (margin coin) |
-| `isolatedMargin` | `String` | Isolated margin |
-| `isAutoAppendIsolatedMargin` | `Boolean` | Whether the auto-adding of funds for the isolated margin is enabled (only for isolated mode) |
-| `cumOpenSize` | `String` | Accumulated opened positions |
-| `cumOpenValue` | `String` | Accumulated value of opened positions |
-| `cumOpenFee` | `String` | Accumulated fees paid for opened positions |
-| `cumCloseSize` | `String` | Accumulated closed positions |
-| `cumCloseValue` | `String` | Accumulated value of closed positions |
-| `cumCloseFee` | `String` | Accumulated fees paid for closing positions |
-| `cumFundingFee` | `String` | Accumulated settled funding fees |
-| `cumLiquidateFee` | `String` | Accumulated liquidation fees |
-| `createdMatchSequenceId` | `Long` | Matching engine sequence ID at creation |
-| `updatedMatchSequenceId` | `Long` | Matching engine sequence ID at last update |
-| `createdTime` | `Long` | Creation time Unix millisecond timestamp |
-| `updatedTime` | `Long` | Update time Unix millisecond timestamp |
-| `unrealizePnl` | `String` | Unrealized PnL |
-| `liquidatePrice` | `String` | Estimated liquidation price If the value = 0, it means the position is at low risk and there is no liquidation price at this time |
+| `id` | `Long` | Position ID. |
+| `asset` | `String` | Associated collateral asset. |
+| `symbol` | `String` | Trading pair. |
+| `side` | `String` | Position direction such as LONG or SHORT. |
+| `marginType` | `String` | Margin mode: CROSSED or ISOLATED. |
+| `separatedMode` | `String` | Position separation mode: COMBINED or SEPARATED. |
+| `separatedOpenOrderId` | `Long` | Separated-position open order ID. |
+| `leverage` | `String` | Position leverage. |
+| `size` | `String` | Current position size. |
+| `openValue` | `String` | Open position value. |
+| `openFee` | `String` | Open fee. |
+| `fundingFee` | `String` | Funding fee. |
+| `marginSize` | `String` | Margin amount in the collateral asset. |
+| `isolatedMargin` | `String` | Isolated margin amount. |
+| `isAutoAppendIsolatedMargin` | `Boolean` | Whether automatic isolated-margin append is enabled. |
+| `cumOpenSize` | `String` | Cumulative open size. |
+| `cumOpenValue` | `String` | Cumulative open value. |
+| `cumOpenFee` | `String` | Cumulative open fee. |
+| `cumCloseSize` | `String` | Cumulative close size. |
+| `cumCloseValue` | `String` | Cumulative close value. |
+| `cumCloseFee` | `String` | Cumulative close fee. |
+| `cumFundingFee` | `String` | Cumulative settled funding fee. |
+| `cumLiquidateFee` | `String` | Cumulative liquidation fee. |
+| `createdMatchSequenceId` | `Long` | Match engine sequence ID at creation. |
+| `updatedMatchSequenceId` | `Long` | Latest match engine sequence ID. |
+| `createdTime` | `Long` | Creation time in Unix milliseconds. |
+| `updatedTime` | `Long` | Update time in Unix milliseconds. |
+| `unrealizePnl` | `String` | Unrealized profit and loss. |
+| `liquidatePrice` | `String` | Estimated liquidation price; 0 means no current liquidation risk. |
 
-## sim.transaction.get_order_history — Get Order History Demo (USER_DATA)
+## sim.transaction.get_order_history — Get Demo Order History (USER_DATA)
 
 - Method: `GET`
 - Path: `/capi/v3/sim/order/history`
 - Category: `sim`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
 - Permission: `USER_DATA`
-- Weight(IP): `10`
-- Source: https://www.weex.com/api-doc/contract/demo/GetOrderHistory
+- Weight(IP/UID): `10 / 10`
+- Source: https://www.weex.com/api-doc/zh-CN/contract/intro
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `symbol` | `String` | `No` | Filter by trading pair. |
+| `symbol` | `String` | `No` | Optional trading pair filter. Omit by default for demo history because normal contract symbols such as `BTCUSDT` may be rejected unless the API accepts the exact simulated symbol filter. |
 | `limit` | `Integer` | `No` | Number of records per page, 1-1000. Default 500. |
-| `startTime` | `Long` | `No` | Start time (ms). Must be less than or equal to endTime . |
-| `endTime` | `Long` | `No` | End time (ms). Must be within 90 days of startTime . |
+| `startTime` | `Long` | `No` | Start time in Unix milliseconds. Must be less than or equal to endTime. |
+| `endTime` | `Long` | `No` | End time in Unix milliseconds. Must be within 90 days of startTime. |
 | `page` | `Integer` | `No` | Page index starting from 0. Default 0. |
 
 ### Response Parameters
@@ -1038,56 +870,54 @@ NONE
 | `orderId` | `Long` | System order ID. |
 | `origQty` | `String` | Original order quantity. |
 | `price` | `String` | Order price. |
-| `reduceOnly` | `Boolean` | Whether the order can only reduce positions. |
-| `side` | `String` | Order side. See Order Side for possible values. |
-| `positionSide` | `String` | Position side. See Position Mode . |
-| `status` | `String` | Order status. See Order Status . |
-| `stopPrice` | `String` | Stop price / trigger price (if applicable). |
+| `reduceOnly` | `Boolean` | Whether the order is reduce-only. |
+| `side` | `String` | Order side. |
+| `positionSide` | `String` | Position side. |
+| `status` | `String` | Order status. |
+| `stopPrice` | `String` | Trigger or stop price when applicable. |
 | `symbol` | `String` | Trading pair. |
-| `time` | `Long` | Order creation time (ms). |
-| `timeInForce` | `String` | Time-in-force policy. See Time in Force . |
-| `type` | `String` | Order type. See Order Type . |
-| `updateTime` | `Long` | Last update time (ms). |
-| `workingType` | `String` | Trigger price type. See Trigger Price Type . |
+| `time` | `Long` | Order time in Unix milliseconds. |
+| `timeInForce` | `String` | Time-in-force policy. |
+| `type` | `String` | Order type. |
+| `updateTime` | `Long` | Last update time in Unix milliseconds. |
+| `workingType` | `String` | Trigger price source. |
 
-## sim.transaction.place_order — Place Order Demo (TRADE)
+## sim.transaction.place_order — Place Demo Order (TRADE)
 
 - Method: `POST`
 - Path: `/capi/v3/sim/order`
 - Category: `sim`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
 - Permission: `TRADE`
-- Rate Limits: `X-ORDER-COUNT-10S=1, X-ORDER-COUNT-1M=1, X-USED-WEIGHT-1M=0`
-- Source: https://www.weex.com/api-doc/contract/demo/PlaceOrder
+- Weight(IP/UID): `2 / 5`
+- Source: https://www.weex.com/api-doc/zh-CN/contract/intro
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `symbol` | `String` | `Yes` | Trading pair, for example BTCSUSDT . |
-| `side` | `String` | `Yes` | Order side. Supported values: BUY , SELL . |
-| `positionSide` | `String` | `Yes` | Position side. Supported values: LONG , SHORT . |
-| `type` | `String` | `Yes` | Order type. Supported values: LIMIT , MARKET . |
-| `timeInForce` | `String` | `Conditional` | Time-in-force policy. Required when type = LIMIT . Supported values: GTC , IOC , FOK, POST_ONLY. |
+| `symbol` | `String` | `Yes` | Trading pair, for example BTCSUSDT. |
+| `side` | `String` | `Yes` | Order side. Supported values: BUY, SELL. |
+| `positionSide` | `String` | `Yes` | Position side. Supported values: LONG, SHORT. |
+| `type` | `String` | `Yes` | Order type. Demo order supports LIMIT and MARKET. |
+| `timeInForce` | `String` | `Conditional` | Required when type = LIMIT. Supported values: GTC, IOC, FOK, POST_ONLY. |
 | `quantity` | `String` | `Yes` | Order quantity. Must be greater than 0. |
-| `price` | `String` | `Conditional` | Limit price. Required when type = LIMIT . |
-| `newClientOrderId` | `String` | `Yes` | Client order identifier (1-36 characters, pattern ^[\\.A-Z\:/a-z0-9_-]{1,36}$ ). |
+| `price` | `String` | `Conditional` | Limit price. Required when type = LIMIT. |
+| `newClientOrderId` | `String` | `Yes` | Client-defined order ID, 1-36 chars matching ^[.A-Z:/a-z0-9_-]{1,36}$. |
 | `tpTriggerPrice` | `String` | `No` | Optional take-profit trigger price. |
 | `slTriggerPrice` | `String` | `No` | Optional stop-loss trigger price. |
-| `TpWorkingType` | `String` | `No` | Take-profit trigger price source. Supported values: CONTRACT_PRICE , MARK_PRICE . Default CONTRACT_PRICE . |
-| `SlWorkingType` | `String` | `No` | Stop-loss trigger price source. Supported values: CONTRACT_PRICE , MARK_PRICE . Default CONTRACT_PRICE . |
+| `TpWorkingType` | `String` | `No` | Take-profit trigger price source. Preserve this official field casing. |
+| `SlWorkingType` | `String` | `No` | Stop-loss trigger price source. Preserve this official field casing. |
 
 ### Response Parameters
 
 | Name | Type | Description |
 |---|---|---|
 | `orderId` | `String` | Order ID assigned by the system. |
-| `clientOrderId` | `String` | Echo of newClientOrderId . |
+| `clientOrderId` | `String` | Echo of newClientOrderId. |
 | `success` | `Boolean` | Whether the order request was accepted. |
-| `errorCode` | `String` | Error code when success = false ; otherwise empty. |
-| `errorMessage` | `String` | Error message when success = false ; otherwise empty. |
+| `errorCode` | `String` | Error code when success = false; otherwise empty. |
+| `errorMessage` | `String` | Error message when success = false; otherwise empty. |
 
 ## Transaction Endpoint Sections
 
@@ -1097,10 +927,7 @@ NONE
 - Path: `/capi/v3/allOpenOrders`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `TRADE`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/CancelAllOrders
 
 ### Request Parameters
@@ -1124,10 +951,7 @@ NONE
 - Path: `/capi/v3/algoOpenOrders`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `TRADE`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/CancelAllPendingOrders
 
 ### Request Parameters
@@ -1151,10 +975,7 @@ NONE
 - Path: `/capi/v3/order`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `object`
-- Permission: `TRADE`
-- Weight(IP): `1`
+- Weight(IP/UID): `2 / 3`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/CancelOrder
 
 ### Request Parameters
@@ -1180,10 +1001,7 @@ NONE
 - Path: `/capi/v3/batchOrders`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `array`
-- Permission: `TRADE`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/CancelOrdersBatch
 
 ### Request Parameters
@@ -1195,13 +1013,7 @@ NONE
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `orderId` | `String` | Cancelled order ID. |
-| `origClientOrderId` | `String` | Client order ID (if provided). |
-| `success` | `Boolean` | Whether the cancel request succeeded. |
-| `errorCode` | `String` | Error code when success = false . |
-| `errorMessage` | `String` | Error description when success = false . |
+NONE
 
 ## transaction.cancel_pending_order — Cancel Conditional Order (TRADE)
 
@@ -1209,10 +1021,7 @@ NONE
 - Path: `/capi/v3/algoOrder`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `object`
-- Permission: `TRADE`
-- Weight(IP): `1`
+- Weight(IP/UID): `2 / 3`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/CancelPendingOrder
 
 ### Request Parameters
@@ -1223,13 +1032,7 @@ NONE
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `orderId` | `String` | Cancelled order ID. |
-| `origClientOrderId` | `String` | Client order ID (if provided). |
-| `success` | `Boolean` | Whether the cancel request succeeded. |
-| `errorCode` | `String` | Error code when success = false . |
-| `errorMessage` | `String` | Error description when success = false . |
+NONE
 
 ## transaction.close_positions — Close Positions (TRADE)
 
@@ -1237,24 +1040,14 @@ NONE
 - Path: `/capi/v3/closePositions`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `array`
-- Permission: `TRADE`
-- Weight(IP): `40`
+- Weight(IP/UID): `40 / 50`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/ClosePositions
-- Request Constraints:
-  - When both symbol and positionId are provided, the system closes the position specified by positionId , and verifies that the position belongs to the trading pair specified by symbol . If the verification fails, the request is rejected.
-  - When both symbol and positionId are empty, the system closes all open positions in the account.
-  - When only symbol is provided, the system closes all positions under the specified trading pair ( symbol ), including both long and short positions.
-  - When only positionId is provided, the system closes the position corresponding to the specified position ID ( positionId ).
-  - When both symbol and positionId are provided, positionId has priority; the position must belong to the supplied symbol.
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `symbol` | `String` | `No` | Trading pair to close. |
-| `positionId` | `Long` | `No` | Position ID. |
+| `symbol` | `String` | `No` | Trading pair to close. Omit to close all open positions. |
 
 ### Response Parameters
 
@@ -1271,10 +1064,7 @@ NONE
 - Path: `/capi/v3/openOrders`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `USER_DATA`
-- Weight(IP): `2`
+- Weight(IP/UID): `2 / 3`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/GetCurrentOrderStatus
 
 ### Request Parameters
@@ -1290,26 +1080,7 @@ NONE
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `avgPrice` | `String` | Average fill price. |
-| `clientOrderId` | `String` | Client-defined order ID. |
-| `cumQuote` | `String` | Cumulative filled amount in the quote asset. |
-| `executedQty` | `String` | Filled quantity in the base asset. |
-| `orderId` | `Long` | System order ID. |
-| `origQty` | `String` | Original order quantity. |
-| `price` | `String` | Order price. |
-| `reduceOnly` | `Boolean` | Whether the order can only reduce positions. |
-| `side` | `String` | Order side. See Order Side for possible values. |
-| `positionSide` | `String` | Position side. See Position Mode . |
-| `status` | `String` | Order status. See Order Status . |
-| `stopPrice` | `String` | Stop price / trigger price (if applicable). |
-| `symbol` | `String` | Trading pair. |
-| `time` | `Long` | Order creation time (ms). |
-| `timeInForce` | `String` | Time-in-force policy. See Time in Force . |
-| `type` | `String` | Order type. See Order Type . |
-| `updateTime` | `Long` | Last update time (ms). |
-| `workingType` | `String` | Trigger price type. See Trigger Price Type . |
+NONE
 
 ## transaction.get_current_pending_orders — Get Current Conditional Orders (USER_DATA)
 
@@ -1317,10 +1088,7 @@ NONE
 - Path: `/capi/v3/openAlgoOrders`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `USER_DATA`
-- Weight(IP): `3`
+- Weight(IP/UID): `3 / 3`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/GetCurrentPendingOrders
 
 ### Request Parameters
@@ -1329,7 +1097,7 @@ NONE
 |---|---|---|---|
 | `symbol` | `String` | `No` | Trading pair filter. |
 | `startTime` | `Long` | `No` | Start time (ms). |
-| `endTime` | `Long` | `No` | End time (ms). Must be ≥ startTime . |
+| `endTime` | `Long` | `No` | End time (ms). Must be â¥ startTime . |
 | `page` | `Integer` | `No` | Page number starting from 1. Default 1. |
 | `limit` | `Integer` | `No` | Page size, 1-100. Default 100. |
 
@@ -1369,10 +1137,7 @@ NONE
 - Path: `/capi/v3/allAlgoOrders`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `object`
-- Permission: `USER_DATA`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/GetHistoricalPendingOrders
 
 ### Request Parameters
@@ -1397,10 +1162,7 @@ NONE
 - Path: `/capi/v3/order/history`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `USER_DATA`
-- Weight(IP): `10`
+- Weight(IP/UID): `10 / 10`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/GetOrderHistory
 
 ### Request Parameters
@@ -1442,10 +1204,7 @@ NONE
 - Path: `/capi/v3/order`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `object`
-- Permission: `USER_DATA`
-- Weight(IP): `2`
+- Weight(IP/UID): `2 / 3`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/GetSingleOrderInfo
 
 ### Request Parameters
@@ -1483,15 +1242,8 @@ NONE
 - Path: `/capi/v3/userTrades`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `query`
-- Response Container: `array`
-- Permission: `USER_DATA`
-- Weight(IP): `5`
+- Weight(IP/UID): `5 / 5`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/GetTradeDetails
-- Request Constraints:
-  - If startTime and endTime are both not sent, then the last 7 days' data will be returned.
-  - The time between startTime and endTime cannot be longer than 7 days.
-  - Only support querying trade in the past 365 days.
 
 ### Request Parameters
 
@@ -1500,7 +1252,7 @@ NONE
 | `symbol` | `String` | `No` | Trading pair filter. |
 | `orderId` | `Long` | `No` | Only return trades associated with this order. |
 | `startTime` | `Long` | `No` | Start time (ms). |
-| `endTime` | `Long` | `No` | End time (ms). Must be ≥ startTime . |
+| `endTime` | `Long` | `No` | End time (ms). Must be â¥ startTime . |
 | `limit` | `Integer` | `No` | Number of records (1-100). Default 100. |
 
 ### Response Parameters
@@ -1528,10 +1280,7 @@ NONE
 - Path: `/capi/v3/modifyTpSlOrder`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
-- Permission: `TRADE`
-- Rate Limits: `X-ORDER-COUNT-10S=1, X-ORDER-COUNT-1M=1, X-USED-WEIGHT-1M=0`
+- Weight(IP/UID): `2 / 5`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/ModifyTpSlOrder
 
 ### Request Parameters
@@ -1540,7 +1289,7 @@ NONE
 |---|---|---|---|
 | `orderId` | `Long` | `Yes` | Conditional order ID to modify. |
 | `triggerPrice` | `String` | `Yes` | New trigger price (> 0). |
-| `executePrice` | `String` | `Conditional` | New execution price. Set to 0 or omit to switch to market execution. Copy-trading API keys only support market close, so this field must be 0 or omitted. |
+| `executePrice` | `String` | `Conditional` | New execution price. Set to 0 or omit to switch to market execution. |
 | `triggerPriceType` | `String` | `No` | Trigger price source. CONTRACT_PRICE or MARK_PRICE . Default CONTRACT_PRICE . |
 
 ### Response Parameters
@@ -1555,10 +1304,7 @@ NONE
 - Path: `/capi/v3/order`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
-- Permission: `TRADE`
-- Rate Limits: `X-ORDER-COUNT-10S=1, X-ORDER-COUNT-1M=1, X-USED-WEIGHT-1M=0`
+- Weight(IP/UID): `2 / 5`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/PlaceOrder
 
 ### Request Parameters
@@ -1569,7 +1315,7 @@ NONE
 | `side` | `String` | `Yes` | Order side. Supported values: BUY , SELL . |
 | `positionSide` | `String` | `Yes` | Position side. Supported values: LONG , SHORT . |
 | `type` | `String` | `Yes` | Order type. Supported values: LIMIT , MARKET . |
-| `timeInForce` | `String` | `Conditional` | Time-in-force policy. Required when type = LIMIT . Supported values: GTC , IOC , FOK , POST_ONLY . |
+| `timeInForce` | `String` | `Conditional` | Time-in-force policy. Required when type = LIMIT . Supported values: GTC , IOC , FOK . |
 | `quantity` | `String` | `Yes` | Order quantity. Must be greater than 0. |
 | `price` | `String` | `Conditional` | Limit price. Required when type = LIMIT . |
 | `newClientOrderId` | `String` | `Yes` | Client order identifier (1-36 characters, pattern ^[\\.A-Z\:/a-z0-9_-]{1,36}$ ). |
@@ -1594,27 +1340,18 @@ NONE
 - Path: `/capi/v3/batchOrders`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `array`
-- Permission: `TRADE`
-- Rate Limits: `X-ORDER-COUNT-10S=5, X-ORDER-COUNT-1M=5, X-USED-WEIGHT-1M=0`
+- Weight(IP/UID): `5 / 10`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/PlaceOrdersBatch
 
 ### Request Parameters
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `batchOrders` | `Array<PlaceOrder>` | `Yes` | Up to 5 orders per request. Each element uses the same fields as Place Order (TRADE) . |
+| `batchOrders` | `Array<PlaceOrder>` | `Yes` | Up to 10 orders per request. Each element uses the same fields as Place Order (TRADE) . |
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `orderId` | `String` | Order ID assigned by the system. |
-| `clientOrderId` | `String` | Echo of newClientOrderId . |
-| `success` | `Boolean` | Whether the order request was accepted. |
-| `errorCode` | `String` | Error code when success = false ; otherwise empty. |
-| `errorMessage` | `String` | Error message when success = false ; otherwise empty. |
+NONE
 
 ## transaction.place_pending_order — Place Conditional Order (TRADE)
 
@@ -1622,10 +1359,7 @@ NONE
 - Path: `/capi/v3/algoOrder`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `object`
-- Permission: `TRADE`
-- Rate Limits: `X-ORDER-COUNT-10S=1, X-ORDER-COUNT-1M=1, X-USED-WEIGHT-1M=0`
+- Weight(IP/UID): `2 / 5`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/PlacePendingOrder
 
 ### Request Parameters
@@ -1647,13 +1381,7 @@ NONE
 
 ### Response Parameters
 
-| Name | Type | Description |
-|---|---|---|
-| `orderId` | `String` | Order ID assigned by the system. |
-| `clientOrderId` | `String` | Echo of newClientOrderId . |
-| `success` | `Boolean` | Whether the order request was accepted. |
-| `errorCode` | `String` | Error code when success = false ; otherwise empty. |
-| `errorMessage` | `String` | Error message when success = false ; otherwise empty. |
+NONE
 
 ## transaction.place_tp_sl_order — Place TP/SL Conditional Orders (TRADE)
 
@@ -1661,10 +1389,7 @@ NONE
 - Path: `/capi/v3/placeTpSlOrder`
 - Category: `transaction`
 - Requires Auth: `True`
-- Request Transport: `body`
-- Response Container: `array`
-- Permission: `TRADE`
-- Rate Limits: `X-ORDER-COUNT-10S=1, X-ORDER-COUNT-1M=1, X-USED-WEIGHT-1M=0`
+- Weight(IP/UID): `2 / 5`
 - Source: https://www.weex.com/api-doc/contract/Transaction_API/PlaceTpSlOrder
 
 ### Request Parameters
@@ -1675,8 +1400,8 @@ NONE
 | `clientAlgoId` | `String` | `Yes` | Client-defined identifier (1-36 characters, pattern ^[\\.A-Z\:/a-z0-9_-]{1,36}$ ). |
 | `planType` | `String` | `Yes` | Plan type. Values: TAKE_PROFIT , STOP_LOSS . |
 | `triggerPrice` | `String` | `Yes` | Trigger price (> 0). |
-| `executePrice` | `String` | `Conditional` | Execution price. Set to 0 or omit for market execution. Copy-trading API keys only support market close, so this field must be 0 or omitted. |
-| `quantity` | `String` | `No` | Quantity to execute. Set to 0 or omit to set TP/SL for the full position. Copy-trading API keys must close the full position, so this field must be 0 or omitted. |
+| `executePrice` | `String` | `Conditional` | Execution price. Set to 0 or omit for market execution. |
+| `quantity` | `String` | `Yes` | Quantity to execute. |
 | `positionSide` | `String` | `Yes` | Position side ( LONG , SHORT ). |
 | `triggerPriceType` | `String` | `No` | Trigger source. CONTRACT_PRICE or MARK_PRICE . Default CONTRACT_PRICE . |
 
